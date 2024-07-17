@@ -1,0 +1,30 @@
+# Ignore all JSON files
+*.json
+
+# Ignore all CSV files
+*.csv
+
+# Python-related files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+*.venv
+env/
+*.env
+
+# IDE-specific files
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
