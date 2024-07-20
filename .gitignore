@@ -1,7 +1,9 @@
 # Ignore all JSON files
+output/*.json
 *.json
 
 # Ignore all CSV files
+output/*.csv
 *.csv
 
 # Python-related files
