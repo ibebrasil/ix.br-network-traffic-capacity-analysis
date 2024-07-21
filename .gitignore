@@ -6,6 +6,9 @@ output/*.json
 output/*.csv
 *.csv
 
+output/img/*.png
+
+
 # Python-related files
 __pycache__/
 *.py[cod]
