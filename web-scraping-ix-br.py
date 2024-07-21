@@ -6,7 +6,7 @@ import os
 import time
 from urllib.parse import urljoin
 
-def get_city_urls_and_names(url):
+def get_city_info(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -20,62 +20,83 @@ def get_city_urls_and_names(url):
         return []
     
     options = select.find_all('option')
-    return [(option['value'], option.text.strip()) for option in options if option['value'].startswith('/adesao/')]
+    city_info = []
+    for option in options:
+        if 'Selecione' not in option.text and option.get('value'):
+            value = option['value']
+            city_uf = option.text.strip()
+            city_code = value.split('/')[-1]
+            city_info.append((city_code, city_uf))
+    
+    return city_info
 
-def create_slug(name):
-    # Remove caracteres não alfanuméricos exceto hífens, e converte para minúsculas
-    slug = re.sub(r'[^a-zA-Z0-9-]+', '', name.lower().replace(' ', ''))
-    return slug
-
-def extract_company_data(url, city_name):
+def extract_company_data(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    city_code = url.split('/')[-1]
-    
     data = []
-    state_uf = ""
     
     for item in soup.find_all(['b', 'br']):
         if isinstance(item, element.Tag) and item.name == 'b' and item.text.startswith('[') and item.text.endswith(']'):
             company = item.text.strip('[]')
             company = re.sub(r'^PIX\s*', '', company).strip()
-            company_slug = create_slug(company)
             email_element = item.find_next(string=re.compile(r'\S+@\S+'))
-            if email_element:
-                email = email_element.strip()
-                domain = email.split('@')[-1]
-                
-                # Procurar o UF do Estado após o e-mail
-                next_element = email_element.find_next()
-                while next_element:
-                    if isinstance(next_element, element.NavigableString):
-                        uf_match = re.search(r'\s-\s([A-Z]{2})', str(next_element))
-                        if uf_match:
-                            state_uf = uf_match.group(1)
-                            break
-                    elif isinstance(next_element, element.Tag) and next_element.name == 'b':
-                        break
-                    next_element = next_element.next_element
-                
-                data.append([city_code, city_name, state_uf, company, company_slug, email, domain])
+            email = email_element.strip() if email_element else ""
+            domain = email.split('@')[-1] if email else ""
+            
+            data.append([company, email, domain])
     
     return data
 
+def get_additional_company_data(url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    company_data = {}
+    map_tag = soup.find('map')
+    if map_tag:
+        for area in map_tag.find_all('area'):
+            alt = area.get('alt', '')
+            href = area.get('href', '')
+            if href.startswith('/trafego/pix/'):
+                slug = href.split('/')[-2]
+                company_data[alt] = slug
+    
+    return company_data
+
 def main():
     base_url = 'https://ix.br'
-    city_page_url = 'https://ix.br/adesao/pix/'
+    city_page_url = 'https://ix.br/trafego/pix/'
     
-    city_info = get_city_urls_and_names(city_page_url)
+    city_info = get_city_info(city_page_url)
     
     all_data = []
-    for city_path, city_name in city_info:
-        url = urljoin(base_url, city_path)
-        print(f"Processando: {url} - {city_name}")
-        all_data.extend(extract_company_data(url, city_name))
+    for city_code, city_uf in city_info:
+        company_url = f'https://ix.br/adesao/{city_code}'
+        additional_data_url = f'https://ix.br/trafego/pix/{city_code}'
+        
+        print(f"Processando: {company_url}")
+        company_data = extract_company_data(company_url)
+        additional_data = get_additional_company_data(additional_data_url)
+        
+        # Separar corretamente o nome da cidade e a UF
+        city_name, uf = city_uf.rsplit('/', 1)
+        
+        for company, email, domain in company_data:
+            slug = ""
+            for alt_name, company_slug in additional_data.items():
+                if company.lower() in alt_name.lower() or alt_name.lower() in company.lower():
+                    slug = company_slug
+                    break
+            
+            all_data.append([city_code, city_name, uf, company, slug, email, domain])
+        
         time.sleep(1)  # Pausa de 1 segundo entre as requisições
     
     os.makedirs('output', exist_ok=True)
