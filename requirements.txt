@@ -2,5 +2,8 @@ requests==2.31.0
 numpy>=1.23.5,<2.0.0
 python-dotenv>=0.21.0
 beautifulsoup4
-opencv-python-headless
-numpy
+langchain
+openai
+python-dotenv
+langchain_openai
+pandas
