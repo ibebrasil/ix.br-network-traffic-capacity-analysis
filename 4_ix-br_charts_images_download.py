@@ -8,7 +8,7 @@ import time
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
-def download_image(url, output_path, retries=MAX_RETRIES):
+def download_image(url, output_path, city_code, slug, retries=MAX_RETRIES):
     print(f"Verificando imagem de: {url}")
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -23,7 +23,7 @@ def download_image(url, output_path, retries=MAX_RETRIES):
             monthly_img = soup.find('img', alt='Monthly')
             if monthly_img:
                 img_url = urljoin(url, monthly_img['src'])
-                img_filename = os.path.basename(img_url)
+                img_filename = f"pix__{city_code.lower()}__{slug}__bps__monthly.png"
                 img_path = os.path.join(output_path, img_filename)
                 
                 if os.path.exists(img_path):
@@ -67,7 +67,7 @@ def process_csv(input_file, output_path):
             
             if slug:
                 url = f'https://ix.br/trafego/pix/{city_code}/{slug}/bps'
-                downloaded_image = download_image(url, output_path)
+                downloaded_image = download_image(url, output_path, city_code, slug)
                 if downloaded_image:
                     print(f"Imagem para {slug} baixada: {downloaded_image}")
                 else:
