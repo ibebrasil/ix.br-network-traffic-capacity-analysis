@@ -109,7 +109,7 @@ def main():
     city_info = get_city_info(city_page_url)
     
     os.makedirs('output', exist_ok=True)
-    output_file = os.path.join('output', 'empresas_ix_br.csv')
+    output_file = os.path.join('output', 'ix-br_entities_data.csv')
     
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)

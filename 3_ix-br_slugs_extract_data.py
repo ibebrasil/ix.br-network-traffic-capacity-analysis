@@ -12,7 +12,7 @@ def get_city_info(url):
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    select = soup.find('select')
+    select = soup.find('select', {'name': 'cidade'})
     
     if not select:
         print("Não foi possível encontrar o elemento select na página.")
@@ -21,7 +21,7 @@ def get_city_info(url):
     options = select.find_all('option')
     city_info = []
     for option in options:
-        if 'Selecione' not in option.text and option.get('value'):
+        if option.get('value'):
             value = option['value']
             city_uf = option.text.strip()
             city_code = value.split('/')[-1]
@@ -64,7 +64,7 @@ def main():
     city_info = get_city_info(city_page_url)
     
     os.makedirs('output', exist_ok=True)
-    output_file = os.path.join('output', 'empresas_ix_br_map.csv')
+    output_file = os.path.join('output', 'ix-br_slugs_data.csv')
     
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
@@ -79,7 +79,13 @@ def main():
             companies = extract_map_data(html_content)
             
             # Separar corretamente o nome da cidade e a UF
-            city_name, uf = city_uf.rsplit('/', 1)
+            city_parts = city_uf.split('/')
+            if len(city_parts) >= 2:
+                city_name = ' '.join(city_parts[:-1]).strip()
+                uf = city_parts[-1].strip()
+            else:
+                city_name = city_uf
+                uf = ''
             
             for company in companies:
                 writer.writerow([

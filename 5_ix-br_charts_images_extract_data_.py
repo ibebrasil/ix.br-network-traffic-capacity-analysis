@@ -52,7 +52,7 @@ def update_csv(df, extracted_data, slug):
     output_data = lines[1].split()
     
     # Update the row
-    row_index = df.index[df['Slug da Empresa'] == slug].tolist()[0]
+    row_index = df.index[df['Slug'] == slug].tolist()[0]
     df.at[row_index, 'Input_Maximum'] = input_data[2]
     df.at[row_index, 'Input_Maximum_Unit'] = input_data[3]
     df.at[row_index, 'Input_Average'] = input_data[5]
@@ -70,16 +70,15 @@ def update_csv(df, extracted_data, slug):
     return df
 
 def is_row_processed(row):
-    return (pd.notna(row['Input_Maximum']) and pd.notna(row['Input_Average']) and 
-            pd.notna(row['Input_Current']) and pd.notna(row['Output_Maximum']) and 
-            pd.notna(row['Output_Average']) and pd.notna(row['Output_Current']))
+    return False  # Always process all rows
 
 # Main execution
-csv_path = "output/empresas_ix_br.csv"
+input_csv_path = "output/ix-br_slugs_data.csv"
+output_csv_path = "output/ix-br_slugs_data_processed.csv"
 image_dir = "output/img/"
 
 # Read the CSV file
-df = pd.read_csv(csv_path)
+df = pd.read_csv(input_csv_path)
 
 # Add new columns if they don't exist
 new_columns = ['Input_Maximum', 'Input_Maximum_Unit', 'Input_Average', 'Input_Average_Unit',
@@ -88,7 +87,7 @@ new_columns = ['Input_Maximum', 'Input_Maximum_Unit', 'Input_Average', 'Input_Av
                'Extraction_Date']
 for col in new_columns:
     if col not in df.columns:
-        df[col] = ''
+        df[col] = pd.NA
 
 total_images = len(df)
 processed_images = 0
@@ -98,7 +97,7 @@ errors = 0
 print(f"Starting processing of {total_images} images...")
 
 for index, row in df.iterrows():
-    slug = row['Slug da Empresa']
+    slug = row['Slug']
     image_path = os.path.join(image_dir, f"pix_{slug}_bps-monthly.png")
     
     processed_images += 1
@@ -120,7 +119,7 @@ for index, row in df.iterrows():
                 print(f"CSV updated for {slug}")
                 
                 # Save the updated DataFrame after each successful extraction
-                df.to_csv(csv_path, index=False)
+                df.to_csv(output_csv_path, index=False)
                 break  # Exit the retry loop if successful
             except Exception as e:
                 print(f"Error processing {slug} (Attempt {attempt + 1}/{MAX_RETRIES}): {str(e)}")
@@ -141,4 +140,4 @@ for index, row in df.iterrows():
     print(f"Progress: {processed_images}/{total_images} images processed. Skipped: {skipped_images}, Errors: {errors}")
 
 print(f"\nProcessing complete. Total images: {total_images}, Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
-print(f"CSV file updated: {csv_path}")
+print(f"New CSV file created: {output_csv_path}")

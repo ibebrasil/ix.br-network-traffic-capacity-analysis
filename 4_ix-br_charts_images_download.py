@@ -63,7 +63,7 @@ def process_csv(input_file, output_path):
         for i, row in enumerate(reader, 1):
             print(f"\nProcessando linha {i} de {total_rows}")
             city_code = row['Sigla da Cidade']
-            slug = row['Slug da Empresa']
+            slug = row['Slug']
             
             if slug:
                 url = f'https://ix.br/trafego/pix/{city_code}/{slug}/bps'
@@ -76,7 +76,7 @@ def process_csv(input_file, output_path):
                 print("Slug da empresa não disponível, pulando download da imagem")
 
 if __name__ == '__main__':
-    input_file = 'output/empresas_ix_br.csv'
+    input_file = 'output/ix-br_slugs_data.csv'
     output_path = 'output/img'
     process_csv(input_file, output_path)
     print(f"Download de imagens concluído. As imagens foram salvas em: {output_path}")

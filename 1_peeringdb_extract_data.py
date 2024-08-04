@@ -44,7 +44,7 @@ def save_csv(data: List[Dict], filename: str):
     if not data:
         return
     keys = data[0].keys()
-    with open(f"output/{filename}.csv", "w", newline="") as f:
+    with open(f"output/peeringdb_{filename}.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, keys)
         writer.writeheader()
         writer.writerows(data)
