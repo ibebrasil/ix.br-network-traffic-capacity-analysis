@@ -161,27 +161,46 @@ def main():
             save_checkpoint(current_step, progress)
 
         if current_step <= 4:
-            print("# 4. Consultar /netixlan para cada 'id' em ix_data")
+            print("# 4. Mesclar dados de IXFAC e FAC")
+            try:
+                ixfac_data
+            except NameError:
+                ixfac_data = load_csv_data("ixfac_data")
+            
+            try:
+                fac_data
+            except NameError:
+                fac_data = load_csv_data("fac_data")
+            
+            merged_ixfac_fac = merge_data(ixfac_data, fac_data, "fac_id", "id")
+            save_json(merged_ixfac_fac, "merged_ixfac_fac_data", mode='w')
+            for item in merged_ixfac_fac:
+                save_csv(item, "merged_ixfac_fac_data")
+            current_step = 5
+            save_checkpoint(current_step, progress)
+
+        if current_step <= 5:
+            print("# 5. Consultar /netixlan para cada 'id' em ix_data")
             netixlan_data = fetch_data("/netixlan", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
             for netixlan in netixlan_data:
                 save_csv(netixlan, "netixlan_data")
                 # save_json(netixlan, "netixlan_data")
             progress["asns"] = list(set(netixlan["asn"] for netixlan in netixlan_data))
-            current_step = 5
+            current_step = 6
             save_checkpoint(current_step, progress)
 
-        if current_step <= 5:
-            print("# 5. Consultar /net para cada 'asn' em netixlan_data")
+        if current_step <= 6:
+            print("# 6. Consultar /net para cada 'asn' em netixlan_data")
             net_data = fetch_data("/net", {"asn__in": ",".join(map(str, progress["asns"]))})
             for net in net_data:
                 save_csv(net, "net_data")
                 # save_json(net, "net_data")
-            current_step = 6
+            current_step = 7
             save_checkpoint(current_step, progress)
 
         print("Extração de dados concluída. Arquivos CSV e JSON foram salvos.")
 
-        print("# 6. Mesclar dados de NETIXLAN e NET")
+        print("# 7. Mesclar dados de NETIXLAN e NET")
         try:
             netixlan_data
         except NameError:
