@@ -129,7 +129,7 @@ def main():
 
     try:
         if current_step <= 1:
-            print("# 1. Baixar todos os /ix com o parâmetro 'country__in=BR'")
+            print("# 1. Download all /ix with parameter 'country__in=BR'")
             ix_data = fetch_data("/ix", {"country__in": "BR"})
             for ix in ix_data:
                 save_csv(ix, "ix_data")
@@ -138,7 +138,7 @@ def main():
             save_checkpoint(current_step, progress)
 
         if current_step <= 2:
-            print("# 2. Consultar /ixfac para cada 'id' em ix_data")
+            print("# 2. Query /ixfac for each 'id' in ix_data")
             ixfac_data = fetch_data("/ixfac", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
             for ixfac in ixfac_data:
                 save_csv(ixfac, "ixfac_data")
@@ -147,7 +147,7 @@ def main():
             save_checkpoint(current_step, progress)
 
         if current_step <= 3:
-            print("# 3. Consultar /fac para cada 'fac_id' em ixfac_data")
+            print("# 3. Query /fac for each 'fac_id' in ixfac_data")
             fac_data = fetch_data("/fac", {"id__in": ",".join(map(str, progress["fac_ids"]))})
             for fac in fac_data:
                 save_csv(fac, "fac_data")
@@ -155,24 +155,24 @@ def main():
             save_checkpoint(current_step, progress)
 
         if current_step <= 4:
-            print("# 4. Mesclar dados de IXFAC e FAC")
+            print("# 4. Merge IXFAC and FAC data")
             ixfac_data = load_csv_data("ixfac_data")
             fac_data = load_csv_data("fac_data")
             
             merged_ixfac_fac = merge_data(ixfac_data, fac_data, "fac_id", "id")
             
-            # Limpar o arquivo CSV existente antes de adicionar novos dados
+            # Clear existing CSV file before adding new data
             with open("output/peeringdb_merged_ixfac_fac_data.csv", 'w', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=merged_ixfac_fac[0].keys())
                 writer.writeheader()
                 writer.writerows(merged_ixfac_fac)
             
-            print(f"Arquivo CSV 'merged_ixfac_fac_data' gerado com {len(merged_ixfac_fac)} registros.")
+            print(f"CSV file 'merged_ixfac_fac_data' generated with {len(merged_ixfac_fac)} records.")
             current_step = 5
             save_checkpoint(current_step, progress)
 
         if current_step <= 5:
-            print("# 5. Consultar /netixlan para cada 'id' em ix_data")
+            print("# 5. Query /netixlan for each 'id' in ix_data")
             netixlan_data = fetch_data("/netixlan", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
             for netixlan in netixlan_data:
                 save_csv(netixlan, "netixlan_data")
@@ -181,7 +181,7 @@ def main():
             save_checkpoint(current_step, progress)
 
         if current_step <= 6:
-            print("# 6. Consultar /net para cada 'asn' em netixlan_data")
+            print("# 6. Query /net for each 'asn' in netixlan_data")
             net_data = fetch_data("/net", {"asn__in": ",".join(map(str, progress["asns"]))})
             for net in net_data:
                 save_csv(net, "net_data")
@@ -189,26 +189,26 @@ def main():
             save_checkpoint(current_step, progress)
 
         if current_step <= 7:
-            print("# 7. Mesclar dados de NETIXLAN e NET")
+            print("# 7. Merge NETIXLAN and NET data")
             netixlan_data = load_csv_data("netixlan_data")
             net_data = load_csv_data("net_data")
             
             merged_netixlan_net = merge_data(netixlan_data, net_data, "asn", "asn")
             
-            # Limpar o arquivo CSV existente antes de adicionar novos dados
+            # Clear existing CSV file before adding new data
             with open("output/peeringdb_merged_netixlan_net_data.csv", 'w', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=merged_netixlan_net[0].keys())
                 writer.writeheader()
                 writer.writerows(merged_netixlan_net)
             
-            print(f"Arquivo CSV 'merged_netixlan_net_data' gerado com {len(merged_netixlan_net)} registros.")
+            print(f"CSV file 'merged_netixlan_net_data' generated with {len(merged_netixlan_net)} records.")
             current_step = 8
             save_checkpoint(current_step, progress)
 
-        print("Extração e mesclagem de dados concluída. Arquivos CSV foram salvos.")
+        print("Data extraction and merging completed. CSV files have been saved.")
 
     except Exception as e:
-        print(f"Ocorreu um erro durante a execução no passo {current_step}: {str(e)}")
+        print(f"An error occurred during execution at step {current_step}: {str(e)}")
         import traceback
         traceback.print_exc()
 
