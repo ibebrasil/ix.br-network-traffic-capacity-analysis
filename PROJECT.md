@@ -50,6 +50,18 @@ This diagram represents the macro flow of the algorithm in the script. It shows 
 
 ## Simplified Macro Algorithm
 
+```mermaid
+graph LR
+    A[Start and Load Checkpoint] --> B[Fetch and Save IX Data]
+    B --> C[Fetch and Save IXFAC Data]
+    C --> D[Fetch and Save FAC Data]
+    D --> E[Merge IXFAC and FAC Data]
+    E --> F[Fetch and Save NETIXLAN Data]
+    F --> G[Fetch and Save NET Data]
+    G --> H[Merge NETIXLAN and NET Data]
+    H --> I[End]
+```
+
 1. Start and Load Checkpoint
 2. Fetch and Save IX Data (Internet Exchange Points in Brazil)
 3. Fetch and Save IXFAC Data (IX Facility Data)
@@ -60,4 +72,4 @@ This diagram represents the macro flow of the algorithm in the script. It shows 
 8. Merge NETIXLAN and NET Data
 9. End
 
-This simplified version provides a high-level overview of the main steps in the data collection and processing pipeline, omitting the repetitive checkpoint and progress update steps for clarity.
+This simplified version provides a high-level overview of the main steps in the data collection and processing pipeline, omitting the repetitive checkpoint and progress update steps for clarity. The diagram above visually represents this simplified flow.
