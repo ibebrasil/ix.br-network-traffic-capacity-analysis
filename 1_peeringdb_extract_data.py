@@ -174,8 +174,15 @@ def main():
             
             merged_ixfac_fac = merge_data(ixfac_data, fac_data, "fac_id", "id")
             save_json(merged_ixfac_fac, "merged_ixfac_fac_data", mode='w')
+            
+            # Limpar o arquivo CSV existente antes de adicionar novos dados
+            with open("output/peeringdb_merged_ixfac_fac_data.csv", 'w', newline='') as f:
+                pass
+            
             for item in merged_ixfac_fac:
-                save_csv(item, "merged_ixfac_fac_data")
+                save_csv(item, "merged_ixfac_fac_data", mode='a')
+            
+            print(f"Arquivo CSV 'merged_ixfac_fac_data' gerado com {len(merged_ixfac_fac)} registros.")
             current_step = 5
             save_checkpoint(current_step, progress)
 
