@@ -193,7 +193,7 @@ def main():
             net_data = load_csv_data("net_data")
         
         merged_netixlan_net = merge_data(netixlan_data, net_data, "asn", "asn")
-        #save_json(merged_netixlan_net, "merged_netixlan_net_data", mode='w')
+        save_json(merged_netixlan_net, "merged_netixlan_net_data", mode='w')
         for item in merged_netixlan_net:
             save_csv(item, "merged_netixlan_net_data")
         current_step = 7
