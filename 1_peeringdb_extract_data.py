@@ -26,10 +26,18 @@ HEADERS = {
 CONFIG_FILE = ".checkpoint.json"
 
 def load_checkpoint():
-    if os.path.exists(CONFIG_FILE):
+    if os.path.exists(CONFIG_FILE) and os.path.getsize(CONFIG_FILE) > 0:
         with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    return {"step": 1, "progress": {}}
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                print("Erro ao decodificar o arquivo de checkpoint. Criando um novo.")
+    
+    # Se o arquivo não existe, está vazio ou tem um erro de JSON, crie um novo
+    default_checkpoint = {"step": 1, "progress": {}}
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(default_checkpoint, f)
+    return default_checkpoint
 
 def save_checkpoint(step, progress):
     checkpoint = {"step": step, "progress": progress}
