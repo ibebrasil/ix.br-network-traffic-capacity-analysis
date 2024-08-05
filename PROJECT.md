@@ -3,15 +3,25 @@
 ## Simplified Macro Algorithm
 
 ```mermaid
-graph LR
-    A[Start and Load Checkpoint] --> B[Fetch and Save IX Data]
-    B --> C[Fetch and Save IXFAC Data]
-    C --> D[Fetch and Save FAC Data]
-    D --> E[Merge IXFAC and FAC Data]
-    E --> F[Fetch and Save NETIXLAN Data]
-    F --> G[Fetch and Save NET Data]
-    G --> H[Merge NETIXLAN and NET Data]
-    H --> I[End]
+graph TD
+    A[Step 1: Start and Load Checkpoint]
+    B[Step 2: Fetch and Save IX Data]
+    C[Step 3: Fetch and Save IXFAC Data]
+    D[Step 4: Fetch and Save FAC Data]
+    E[Step 5: Merge IXFAC and FAC Data]
+    F[Step 6: Fetch and Save NETIXLAN Data]
+    G[Step 7: Fetch and Save NET Data]
+    H[Step 8: Merge NETIXLAN and NET Data]
+    I[Step 9: End]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
 ```
 
 1. Start and Load Checkpoint
@@ -30,65 +40,104 @@ This simplified version provides a high-level overview of the main steps in the 
 
 ```mermaid
 graph TD
-    A[Start] --> B[Load Checkpoint]
-    B --> C{Check Current Step}
+    A[Start]
+    B[Load Checkpoint]
+    C{Check Current Step}
     
-    C -->|Step 1| D1[Fetch IX Data]
-    D1 --> E1[Save IX Data]
-    E1 --> F1[Update Progress with IX IDs]
-    F1 --> G1[Save Checkpoint]
+    D1[Step 1: Fetch IX Data]
+    E1[Save IX Data]
+    F1[Update Progress with IX IDs]
+    G1[Save Checkpoint]
+    
+    D2[Step 2: Fetch IXFAC Data using IX IDs]
+    E2[Save IXFAC Data]
+    F2[Update Progress with FAC IDs]
+    G2[Save Checkpoint]
+    
+    D3[Step 3: Fetch FAC Data using FAC IDs]
+    E3[Save FAC Data]
+    F3[Save Checkpoint]
+    
+    D4[Step 4: Load IXFAC and FAC Data]
+    E4[Merge IXFAC and FAC Data]
+    F4[Save Merged Data]
+    G4[Save Checkpoint]
+    
+    D5[Step 5: Fetch NETIXLAN Data using IX IDs]
+    E5[Save NETIXLAN Data]
+    F5[Update Progress with ASNs]
+    G5[Save Checkpoint]
+    
+    D6[Step 6: Fetch NET Data using ASNs]
+    E6[Save NET Data]
+    F6[Save Checkpoint]
+    
+    D7[Step 7: Load NETIXLAN and NET Data]
+    E7[Merge NETIXLAN and NET Data]
+    F7[Save Merged Data]
+    G7[Save Checkpoint]
+    
+    Z[End]
+
+    A --> B
+    B --> C
+    
+    C -->|Step 1| D1
+    D1 --> E1
+    E1 --> F1
+    F1 --> G1
     G1 --> C
     
-    C -->|Step 2| D2[Fetch IXFAC Data using IX IDs]
-    D2 --> E2[Save IXFAC Data]
-    E2 --> F2[Update Progress with FAC IDs]
-    F2 --> G2[Save Checkpoint]
+    C -->|Step 2| D2
+    D2 --> E2
+    E2 --> F2
+    F2 --> G2
     G2 --> C
     
-    C -->|Step 3| D3[Fetch FAC Data using FAC IDs]
-    D3 --> E3[Save FAC Data]
-    E3 --> F3[Save Checkpoint]
+    C -->|Step 3| D3
+    D3 --> E3
+    E3 --> F3
     F3 --> C
     
-    C -->|Step 4| D4[Load IXFAC and FAC Data]
-    D4 --> E4[Merge IXFAC and FAC Data]
-    E4 --> F4[Save Merged Data]
-    F4 --> G4[Save Checkpoint]
+    C -->|Step 4| D4
+    D4 --> E4
+    E4 --> F4
+    F4 --> G4
     G4 --> C
     
-    C -->|Step 5| D5[Fetch NETIXLAN Data using IX IDs]
-    D5 --> E5[Save NETIXLAN Data]
-    E5 --> F5[Update Progress with ASNs]
-    F5 --> G5[Save Checkpoint]
+    C -->|Step 5| D5
+    D5 --> E5
+    E5 --> F5
+    F5 --> G5
     G5 --> C
     
-    C -->|Step 6| D6[Fetch NET Data using ASNs]
-    D6 --> E6[Save NET Data]
-    E6 --> F6[Save Checkpoint]
+    C -->|Step 6| D6
+    D6 --> E6
+    E6 --> F6
     F6 --> C
     
-    C -->|Step 7| D7[Load NETIXLAN and NET Data]
-    D7 --> E7[Merge NETIXLAN and NET Data]
-    E7 --> F7[Save Merged Data]
-    F7 --> G7[Save Checkpoint]
+    C -->|Step 7| D7
+    D7 --> E7
+    E7 --> F7
+    F7 --> G7
     G7 --> C
     
-    C -->|Step > 7| Z[End]
+    C -->|Step > 7| Z
 ```
 
-Este diagrama representa um fluxo mais detalhado do algoritmo no script, incluindo os passos onde os dados são obtidos de um checkpoint para fazer diversas chamadas em outro checkpoint e depois realizar a mesclagem dos dados.
+This diagram represents a more detailed flow of the algorithm in the script, including the steps where data is retrieved from one checkpoint to make multiple calls in another checkpoint and then merge the data.
 
-Explicação do fluxo detalhado:
+Explanation of the detailed flow:
 
-1. O processo começa carregando o checkpoint atual.
-2. Em cada etapa, o script verifica o passo atual no checkpoint.
-3. No Passo 1, os dados IX são buscados e salvos, e os IDs IX são armazenados no progresso do checkpoint.
-4. No Passo 2, os dados IXFAC são buscados usando os IDs IX do checkpoint anterior, e os IDs FAC são armazenados no progresso.
-5. No Passo 3, os dados FAC são buscados usando os IDs FAC do checkpoint anterior.
-6. No Passo 4, os dados IXFAC e FAC são carregados dos arquivos CSV salvos e mesclados.
-7. No Passo 5, os dados NETIXLAN são buscados usando os IDs IX, e os ASNs são armazenados no progresso.
-8. No Passo 6, os dados NET são buscados usando os ASNs do checkpoint anterior.
-9. No Passo 7, os dados NETIXLAN e NET são carregados dos arquivos CSV salvos e mesclados.
+1. The process begins by loading the current checkpoint.
+2. At each stage, the script checks the current step in the checkpoint.
+3. In Step 1, IX data is fetched and saved, and IX IDs are stored in the checkpoint progress.
+4. In Step 2, IXFAC data is fetched using IX IDs from the previous checkpoint, and FAC IDs are stored in the progress.
+5. In Step 3, FAC data is fetched using FAC IDs from the previous checkpoint.
+6. In Step 4, IXFAC and FAC data are loaded from saved CSV files and merged.
+7. In Step 5, NETIXLAN data is fetched using IX IDs, and ASNs are stored in the progress.
+8. In Step 6, NET data is fetched using ASNs from the previous checkpoint.
+9. In Step 7, NETIXLAN and NET data are loaded from saved CSV files and merged.
 
-Após cada etapa, o checkpoint é atualizado com o progresso atual, permitindo que o script retome a execução a partir do último ponto concluído em caso de interrupção. Este fluxo detalhado mostra como os dados de checkpoints anteriores são utilizados para buscar informações adicionais e como os dados são mesclados em etapas subsequentes.
+After each step, the checkpoint is updated with the current progress, allowing the script to resume execution from the last completed point in case of interruption. This detailed flow shows how data from previous checkpoints is used to fetch additional information and how data is merged in subsequent steps.
 
