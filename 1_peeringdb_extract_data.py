@@ -23,7 +23,7 @@ HEADERS = {
 }
 
 # Arquivo de configuração para checkpoint
-CONFIG_FILE = "checkpoint.json"
+CONFIG_FILE = ".checkpoint.json"
 
 def load_checkpoint():
     if os.path.exists(CONFIG_FILE):
