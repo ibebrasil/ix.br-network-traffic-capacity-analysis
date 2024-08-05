@@ -1,5 +1,4 @@
 import requests
-import json
 import csv
 from dotenv import load_dotenv
 from typing import List, Dict
@@ -101,13 +100,6 @@ def save_csv(data: Dict, filename: str, mode='a'):
             writer.writeheader()
         writer.writerow(data)
 
-def save_json(data: Dict, filename: str, mode='a'):
-    print(f"""Adicionando dados ao arquivo JSON: {filename}""")
-    with open(f"output/peeringdb_{filename}.json", mode) as f:
-        if mode == 'a':
-            f.write(json.dumps(data) + '\n')
-        else:
-            json.dump(data, f, indent=2)
 
 def merge_data(data1: List[Dict], data2: List[Dict], key1: str, key2: str) -> List[Dict]:
     print("""Função para mesclar dois conjuntos de dados.""")
@@ -167,14 +159,12 @@ def main():
             fac_data = load_csv_data("fac_data")
             
             merged_ixfac_fac = merge_data(ixfac_data, fac_data, "fac_id", "id")
-            save_json(merged_ixfac_fac, "merged_ixfac_fac_data", mode='w')
             
             # Limpar o arquivo CSV existente antes de adicionar novos dados
             with open("output/peeringdb_merged_ixfac_fac_data.csv", 'w', newline='') as f:
-                pass
-            
-            for item in merged_ixfac_fac:
-                save_csv(item, "merged_ixfac_fac_data", mode='a')
+                writer = csv.DictWriter(f, fieldnames=merged_ixfac_fac[0].keys())
+                writer.writeheader()
+                writer.writerows(merged_ixfac_fac)
             
             print(f"Arquivo CSV 'merged_ixfac_fac_data' gerado com {len(merged_ixfac_fac)} registros.")
             current_step = 5
@@ -203,20 +193,18 @@ def main():
             net_data = load_csv_data("net_data")
             
             merged_netixlan_net = merge_data(netixlan_data, net_data, "asn", "asn")
-            save_json(merged_netixlan_net, "merged_netixlan_net_data", mode='w')
             
             # Limpar o arquivo CSV existente antes de adicionar novos dados
             with open("output/peeringdb_merged_netixlan_net_data.csv", 'w', newline='') as f:
-                pass
-            
-            for item in merged_netixlan_net:
-                save_csv(item, "merged_netixlan_net_data", mode='a')
+                writer = csv.DictWriter(f, fieldnames=merged_netixlan_net[0].keys())
+                writer.writeheader()
+                writer.writerows(merged_netixlan_net)
             
             print(f"Arquivo CSV 'merged_netixlan_net_data' gerado com {len(merged_netixlan_net)} registros.")
             current_step = 8
             save_checkpoint(current_step, progress)
 
-        print("Extração e mesclagem de dados concluída. Arquivos CSV e JSON foram salvos.")
+        print("Extração e mesclagem de dados concluída. Arquivos CSV foram salvos.")
 
     except Exception as e:
         print(f"Ocorreu um erro durante a execução no passo {current_step}: {str(e)}")
