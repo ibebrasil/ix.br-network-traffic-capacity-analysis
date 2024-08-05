@@ -6,6 +6,7 @@ import os
 import time
 from requests.exceptions import HTTPError
 import pandas as pd
+import json
 
 load_dotenv()
 
