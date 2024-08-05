@@ -39,90 +39,88 @@ This simplified version provides a high-level overview of the main steps in the 
 ## Detailed Algorithm Diagram
 
 ```mermaid
-graph TD
-    A[Start]
-    B[Load Checkpoint]
-    C{Check Current Step}
+graph LR
+    A[Start] --> B[Load Checkpoint]
+    B --> C{Check Current Step}
     
-    D1[Step 1: Fetch IX Data]
+    subgraph Step1[Step 1]
+    direction TB
+    D1[Fetch IX Data]
     E1[Save IX Data]
     F1[Update Progress with IX IDs]
     G1[Save Checkpoint]
+    D1 --> E1 --> F1 --> G1
+    end
     
-    D2[Step 2: Fetch IXFAC Data using IX IDs]
+    subgraph Step2[Step 2]
+    direction TB
+    D2[Fetch IXFAC Data using IX IDs]
     E2[Save IXFAC Data]
     F2[Update Progress with FAC IDs]
     G2[Save Checkpoint]
+    D2 --> E2 --> F2 --> G2
+    end
     
-    D3[Step 3: Fetch FAC Data using FAC IDs]
+    subgraph Step3[Step 3]
+    direction TB
+    D3[Fetch FAC Data using FAC IDs]
     E3[Save FAC Data]
     F3[Save Checkpoint]
+    D3 --> E3 --> F3
+    end
     
-    D4[Step 4: Load IXFAC and FAC Data]
+    subgraph Step4[Step 4]
+    direction TB
+    D4[Load IXFAC and FAC Data]
     E4[Merge IXFAC and FAC Data]
     F4[Save Merged Data]
     G4[Save Checkpoint]
+    D4 --> E4 --> F4 --> G4
+    end
     
-    D5[Step 5: Fetch NETIXLAN Data using IX IDs]
+    subgraph Step5[Step 5]
+    direction TB
+    D5[Fetch NETIXLAN Data using IX IDs]
     E5[Save NETIXLAN Data]
     F5[Update Progress with ASNs]
     G5[Save Checkpoint]
+    D5 --> E5 --> F5 --> G5
+    end
     
-    D6[Step 6: Fetch NET Data using ASNs]
+    subgraph Step6[Step 6]
+    direction TB
+    D6[Fetch NET Data using ASNs]
     E6[Save NET Data]
     F6[Save Checkpoint]
+    D6 --> E6 --> F6
+    end
     
-    D7[Step 7: Load NETIXLAN and NET Data]
+    subgraph Step7[Step 7]
+    direction TB
+    D7[Load NETIXLAN and NET Data]
     E7[Merge NETIXLAN and NET Data]
     F7[Save Merged Data]
     G7[Save Checkpoint]
+    D7 --> E7 --> F7 --> G7
+    end
     
-    Z[End]
-
-    A --> B
-    B --> C
+    C -->|Step 1| Step1
+    C -->|Step 2| Step2
+    C -->|Step 3| Step3
+    C -->|Step 4| Step4
+    C -->|Step 5| Step5
+    C -->|Step 6| Step6
+    C -->|Step 7| Step7
     
-    C -->|Step 1| D1
-    D1 --> E1
-    E1 --> F1
-    F1 --> G1
-    G1 --> C
+    Step1 --> C
+    Step2 --> C
+    Step3 --> C
+    Step4 --> C
+    Step5 --> C
+    Step6 --> C
+    Step7 --> C
     
-    C -->|Step 2| D2
-    D2 --> E2
-    E2 --> F2
-    F2 --> G2
-    G2 --> C
-    
-    C -->|Step 3| D3
-    D3 --> E3
-    E3 --> F3
-    F3 --> C
-    
-    C -->|Step 4| D4
-    D4 --> E4
-    E4 --> F4
-    F4 --> G4
-    G4 --> C
-    
-    C -->|Step 5| D5
-    D5 --> E5
-    E5 --> F5
-    F5 --> G5
-    G5 --> C
-    
-    C -->|Step 6| D6
-    D6 --> E6
-    E6 --> F6
-    F6 --> C
-    
-    C -->|Step 7| D7
-    D7 --> E7
-    E7 --> F7
-    F7 --> G7
-    G7 --> C
-    
-    C -->|Step > 7| Z
+    C -->|Step > 7| Z[End]
 ```
 
 This diagram represents a more detailed flow of the algorithm in the script, including the steps where data is retrieved from one checkpoint to make multiple calls in another checkpoint and then merge the data.
