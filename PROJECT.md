@@ -44,64 +44,38 @@ graph LR
     B --> C{Check Current Step}
     
     subgraph Step1[Step 1]
-    direction TB
-    D1[Fetch IX Data]
-    E1[Save IX Data]
-    F1[Update Progress with IX IDs]
-    G1[Save Checkpoint]
-    D1 --> E1 --> F1 --> G1
+    direction LR
+    D1[Fetch IX Data] --> E1[Save IX Data] --> F1[Update Progress with IX IDs] --> G1[Save Checkpoint]
     end
     
     subgraph Step2[Step 2]
-    direction TB
-    D2[Fetch IXFAC Data using IX IDs]
-    E2[Save IXFAC Data]
-    F2[Update Progress with FAC IDs]
-    G2[Save Checkpoint]
-    D2 --> E2 --> F2 --> G2
+    direction LR
+    D2[Fetch IXFAC Data using IX IDs] --> E2[Save IXFAC Data] --> F2[Update Progress with FAC IDs] --> G2[Save Checkpoint]
     end
     
     subgraph Step3[Step 3]
-    direction TB
-    D3[Fetch FAC Data using FAC IDs]
-    E3[Save FAC Data]
-    F3[Save Checkpoint]
-    D3 --> E3 --> F3
+    direction LR
+    D3[Fetch FAC Data using FAC IDs] --> E3[Save FAC Data] --> F3[Save Checkpoint]
     end
     
     subgraph Step4[Step 4]
-    direction TB
-    D4[Load IXFAC and FAC Data]
-    E4[Merge IXFAC and FAC Data]
-    F4[Save Merged Data]
-    G4[Save Checkpoint]
-    D4 --> E4 --> F4 --> G4
+    direction LR
+    D4[Load IXFAC and FAC Data] --> E4[Merge IXFAC and FAC Data] --> F4[Save Merged Data] --> G4[Save Checkpoint]
     end
     
     subgraph Step5[Step 5]
-    direction TB
-    D5[Fetch NETIXLAN Data using IX IDs]
-    E5[Save NETIXLAN Data]
-    F5[Update Progress with ASNs]
-    G5[Save Checkpoint]
-    D5 --> E5 --> F5 --> G5
+    direction LR
+    D5[Fetch NETIXLAN Data using IX IDs] --> E5[Save NETIXLAN Data] --> F5[Update Progress with ASNs] --> G5[Save Checkpoint]
     end
     
     subgraph Step6[Step 6]
-    direction TB
-    D6[Fetch NET Data using ASNs]
-    E6[Save NET Data]
-    F6[Save Checkpoint]
-    D6 --> E6 --> F6
+    direction LR
+    D6[Fetch NET Data using ASNs] --> E6[Save NET Data] --> F6[Save Checkpoint]
     end
     
     subgraph Step7[Step 7]
-    direction TB
-    D7[Load NETIXLAN and NET Data]
-    E7[Merge NETIXLAN and NET Data]
-    F7[Save Merged Data]
-    G7[Save Checkpoint]
-    D7 --> E7 --> F7 --> G7
+    direction LR
+    D7[Load NETIXLAN and NET Data] --> E7[Merge NETIXLAN and NET Data] --> F7[Save Merged Data] --> G7[Save Checkpoint]
     end
     
     C -->|Step 1| Step1
