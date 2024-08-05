@@ -122,7 +122,11 @@ def merge_data(data1: List[Dict], data2: List[Dict], key1: str, key2: str) -> Li
 
 def load_csv_data(filename: str) -> List[Dict]:
     print(f"Carregando dados do arquivo CSV: {filename}")
-    df = pd.read_csv(f"output/peeringdb_{filename}.csv")
+    file_path = f"output/peeringdb_{filename}.csv"
+    if not os.path.exists(file_path):
+        print(f"Arquivo {file_path} não encontrado.")
+        return []
+    df = pd.read_csv(file_path)
     return df.to_dict('records')
 
 def main():
@@ -136,7 +140,6 @@ def main():
             ix_data = fetch_data("/ix", {"country__in": "BR"})
             for ix in ix_data:
                 save_csv(ix, "ix_data")
-                # save_json(ix, "ix_data")
             progress["ix_ids"] = [ix["id"] for ix in ix_data]
             current_step = 2
             save_checkpoint(current_step, progress)
@@ -146,7 +149,6 @@ def main():
             ixfac_data = fetch_data("/ixfac", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
             for ixfac in ixfac_data:
                 save_csv(ixfac, "ixfac_data")
-                # save_json(ixfac, "ixfac_data")
             progress["fac_ids"] = list(set(ixfac["fac_id"] for ixfac in ixfac_data))
             current_step = 3
             save_checkpoint(current_step, progress)
@@ -156,21 +158,13 @@ def main():
             fac_data = fetch_data("/fac", {"id__in": ",".join(map(str, progress["fac_ids"]))})
             for fac in fac_data:
                 save_csv(fac, "fac_data")
-                # save_json(fac, "fac_data")
             current_step = 4
             save_checkpoint(current_step, progress)
 
         if current_step <= 4:
             print("# 4. Mesclar dados de IXFAC e FAC")
-            try:
-                ixfac_data
-            except NameError:
-                ixfac_data = load_csv_data("ixfac_data")
-            
-            try:
-                fac_data
-            except NameError:
-                fac_data = load_csv_data("fac_data")
+            ixfac_data = load_csv_data("ixfac_data")
+            fac_data = load_csv_data("fac_data")
             
             merged_ixfac_fac = merge_data(ixfac_data, fac_data, "fac_id", "id")
             save_json(merged_ixfac_fac, "merged_ixfac_fac_data", mode='w')
@@ -191,7 +185,6 @@ def main():
             netixlan_data = fetch_data("/netixlan", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
             for netixlan in netixlan_data:
                 save_csv(netixlan, "netixlan_data")
-                # save_json(netixlan, "netixlan_data")
             progress["asns"] = list(set(netixlan["asn"] for netixlan in netixlan_data))
             current_step = 6
             save_checkpoint(current_step, progress)
@@ -201,31 +194,29 @@ def main():
             net_data = fetch_data("/net", {"asn__in": ",".join(map(str, progress["asns"]))})
             for net in net_data:
                 save_csv(net, "net_data")
-                # save_json(net, "net_data")
             current_step = 7
             save_checkpoint(current_step, progress)
 
-        print("Extração de dados concluída. Arquivos CSV e JSON foram salvos.")
-
-        print("# 7. Mesclar dados de NETIXLAN e NET")
-        try:
-            netixlan_data
-        except NameError:
+        if current_step <= 7:
+            print("# 7. Mesclar dados de NETIXLAN e NET")
             netixlan_data = load_csv_data("netixlan_data")
-        
-        try:
-            net_data
-        except NameError:
             net_data = load_csv_data("net_data")
-        
-        merged_netixlan_net = merge_data(netixlan_data, net_data, "asn", "asn")
-        save_json(merged_netixlan_net, "merged_netixlan_net_data", mode='w')
-        for item in merged_netixlan_net:
-            save_csv(item, "merged_netixlan_net_data")
-        current_step = 7
-        save_checkpoint(current_step, progress)
+            
+            merged_netixlan_net = merge_data(netixlan_data, net_data, "asn", "asn")
+            save_json(merged_netixlan_net, "merged_netixlan_net_data", mode='w')
+            
+            # Limpar o arquivo CSV existente antes de adicionar novos dados
+            with open("output/peeringdb_merged_netixlan_net_data.csv", 'w', newline='') as f:
+                pass
+            
+            for item in merged_netixlan_net:
+                save_csv(item, "merged_netixlan_net_data", mode='a')
+            
+            print(f"Arquivo CSV 'merged_netixlan_net_data' gerado com {len(merged_netixlan_net)} registros.")
+            current_step = 8
+            save_checkpoint(current_step, progress)
 
-        print("Mesclagem de dados concluída. Arquivos CSV e JSON foram salvos.")
+        print("Extração e mesclagem de dados concluída. Arquivos CSV e JSON foram salvos.")
 
     except Exception as e:
         print(f"Ocorreu um erro durante a execução no passo {current_step}: {str(e)}")
