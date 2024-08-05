@@ -7,6 +7,12 @@ from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 import pandas as pd
 import time
+import logging
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables from .env file
 load_dotenv()
@@ -19,6 +25,7 @@ if not api_key:
 # Configuration
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
+MAX_WORKERS = 4  # Number of parallel processes
 
 # Initialize the ChatOpenAI model
 chat = ChatOpenAI(model="gpt-4o-mini", max_tokens=300)
@@ -46,12 +53,10 @@ def process_image(image_path):
     return response.content
 
 def update_csv(df, extracted_data, slug):
-    # Parse the extracted data
     lines = extracted_data.strip().split('\n')
     input_data = lines[0].split()
     output_data = lines[1].split()
     
-    # Prepare the data to update
     update_data = {
         'Input_Maximum': input_data[2],
         'Input_Maximum_Unit': input_data[3],
@@ -68,92 +73,80 @@ def update_csv(df, extracted_data, slug):
         'Extraction_Date': date.today().isoformat()
     }
     
-    # Update the row
     df.loc[df['Slug'] == slug, update_data.keys()] = update_data.values()
-    
     return df
 
 def is_row_processed(row):
     return pd.notna(row['Input_Maximum']) and pd.notna(row['Output_Maximum']) and \
            row['Input_Maximum'] != '' and row['Output_Maximum'] != ''
 
-# Main execution
-input_csv_path = "output/ix-br_slugs_data.csv"
-output_csv_path = "output/ix-br_slugs_data_processed.csv"
-image_dir = "output/img/"
-
-# Check if the output CSV already exists
-if os.path.exists(output_csv_path):
-    print(f"Output CSV file already exists. Reading from {output_csv_path}")
-    df = pd.read_csv(output_csv_path)
-else:
-    print(f"Output CSV file does not exist. Reading from {input_csv_path}")
-    df = pd.read_csv(input_csv_path)
-    # Add new columns if they don't exist
-    new_columns = ['Input_Maximum', 'Input_Maximum_Unit', 'Input_Average', 'Input_Average_Unit',
-                   'Input_Current', 'Input_Current_Unit', 'Output_Maximum', 'Output_Maximum_Unit',
-                   'Output_Average', 'Output_Average_Unit', 'Output_Current', 'Output_Current_Unit',
-                   'Extraction_Date']
-    for col in new_columns:
-        if col not in df.columns:
-            df[col] = pd.NA
-
-total_images = len(df)
-processed_images = 0
-skipped_images = 0
-errors = 0
-
-print(f"Starting processing of {total_images} images...")
-
-for index, row in df.iterrows():
+def process_single_image(args):
+    index, row, image_dir = args
     slug = row['Slug']
     city_code = row['Sigla da Cidade']
     image_path = os.path.join(image_dir, f"pix__{city_code}__{slug}__bps__monthly.png")
     
-    processed_images += 1
-    print(f"\nProcessing image {processed_images}/{total_images}: {city_code}/{slug}")
-    
     if is_row_processed(row):
-        print(f"Data already exists for {slug}. Skipping...")
-        skipped_images += 1
-        continue
-    
-    if pd.isna(row['Input_Maximum']) or pd.isna(row['Output_Maximum']) or \
-       row['Input_Maximum'] == '' or row['Output_Maximum'] == '':
-        print(f"Incomplete data for {slug}. Processing...")
+        return index, None, "skipped"
     
     if not os.path.exists(image_path):
-        print(f"Image not found for {slug}")
-        errors += 1
-        continue
+        return index, None, "error"
     
-    print(f"Processing image for {slug}")
     for attempt in range(MAX_RETRIES):
         try:
             extracted_data = process_image(image_path)
-            print(f"Extracted data for {slug}:")
-            print(extracted_data)
-            df = update_csv(df, extracted_data, slug)
-            print(f"DataFrame updated for {slug}")
-            
-            # Save the updated DataFrame after each successful extraction
-            df.to_csv(output_csv_path, index=False)
-            print(f"CSV file saved after processing {slug}")
-            break  # Exit the retry loop if successful
+            return index, extracted_data, "success"
         except Exception as e:
-            print(f"Error processing {slug} (Attempt {attempt + 1}/{MAX_RETRIES}): {str(e)}")
-            if attempt < MAX_RETRIES - 1:
-                print(f"Retrying in {RETRY_DELAY} seconds...")
-                time.sleep(RETRY_DELAY)
+            if attempt == MAX_RETRIES - 1:
+                return index, None, f"error: {str(e)}"
+            time.sleep(RETRY_DELAY)
+
+def main():
+    input_csv_path = "output/ix-br_slugs_data.csv"
+    output_csv_path = "output/ix-br_slugs_data_processed.csv"
+    image_dir = "output/img/"
+
+    if os.path.exists(output_csv_path):
+        logging.info(f"Output CSV file already exists. Reading from {output_csv_path}")
+        df = pd.read_csv(output_csv_path)
+    else:
+        logging.info(f"Output CSV file does not exist. Reading from {input_csv_path}")
+        df = pd.read_csv(input_csv_path)
+        new_columns = ['Input_Maximum', 'Input_Maximum_Unit', 'Input_Average', 'Input_Average_Unit',
+                       'Input_Current', 'Input_Current_Unit', 'Output_Maximum', 'Output_Maximum_Unit',
+                       'Output_Average', 'Output_Average_Unit', 'Output_Current', 'Output_Current_Unit',
+                       'Extraction_Date']
+        for col in new_columns:
+            if col not in df.columns:
+                df[col] = pd.NA
+
+    total_images = len(df)
+    logging.info(f"Starting processing of {total_images} images...")
+
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_single_image, (index, row, image_dir)) for index, row in df.iterrows()]
+        
+        processed_images = 0
+        skipped_images = 0
+        errors = 0
+        
+        for future in tqdm(as_completed(futures), total=total_images, desc="Processing Images"):
+            index, extracted_data, status = future.result()
+            if status == "success":
+                df = update_csv(df, extracted_data, df.loc[index, 'Slug'])
+                processed_images += 1
+            elif status == "skipped":
+                skipped_images += 1
             else:
                 errors += 1
-                print(f"Failed to process {slug} after {MAX_RETRIES} attempts.")
-    
-    # Add a small delay to avoid hitting API rate limits
-    time.sleep(1)
+            
+            if processed_images % 10 == 0:
+                df.to_csv(output_csv_path, index=False)
+                logging.info(f"CSV file saved. Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
 
-    # Print progress
-    print(f"Progress: {processed_images}/{total_images} images processed. Skipped: {skipped_images}, Errors: {errors}")
+    df.to_csv(output_csv_path, index=False)
+    logging.info(f"Processing complete. Total images: {total_images}, Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+    logging.info(f"CSV file updated: {output_csv_path}")
 
-print(f"\nProcessing complete. Total images: {total_images}, Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
-print(f"CSV file updated: {output_csv_path}")
+if __name__ == "__main__":
+    main()
