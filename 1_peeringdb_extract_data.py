@@ -13,16 +13,16 @@ load_dotenv()
 secret_key = os.getenv('SECRET_KEY')
 
 MAX_RETRIES = 3
-INITIAL_BACKOFF = 10  # segundos
+INITIAL_BACKOFF = 10  # seconds
 
-# Configurações globais
+# Global settings
 API_BASE_URL = "https://www.peeringdb.com/api"
 HEADERS = {
     "Authorization": "Api-Key " + secret_key,
     "Content-Type": "application/json"
 }
 
-# Arquivo de configuração para checkpoint
+# Configuration file for checkpoint
 CONFIG_FILE = ".checkpoint.json"
 
 def load_checkpoint():
@@ -31,9 +31,9 @@ def load_checkpoint():
             try:
                 return json.load(f)
             except json.JSONDecodeError:
-                print("Erro ao decodificar o arquivo de checkpoint. Criando um novo.")
+                print("Error decoding checkpoint file. Creating a new one.")
     
-    # Se o arquivo não existe, está vazio ou tem um erro de JSON, crie um novo
+    # If the file doesn't exist, is empty, or has a JSON error, create a new one
     default_checkpoint = {"step": 1, "progress": {}}
     with open(CONFIG_FILE, 'w') as f:
         json.dump(default_checkpoint, f)
@@ -53,19 +53,19 @@ def fetch_with_retry(url: str, params: Dict) -> requests.Response:
         except HTTPError as e:
             if e.response.status_code == 429 and attempt < MAX_RETRIES - 1:
                 wait_time = INITIAL_BACKOFF * (2 ** attempt)
-                print(f"Rate limit atingido. Aguardando {wait_time} segundos antes de tentar novamente...")
+                print(f"Rate limit reached. Waiting {wait_time} seconds before trying again...")
                 time.sleep(wait_time)
             else:
                 raise
 
 def fetch_data(endpoint: str, params: Dict) -> List[Dict]:
-    print("""Função para buscar dados da API com paginação.""")
+    print("""Function to fetch data from the API with pagination.""")
     all_data = []
 
-    # Se o endpoint for "/net" e houver "asn__in" nos parâmetros, dividimos em grupos menores
+    # If the endpoint is "/net" and there's "asn__in" in the parameters, we divide into smaller groups
     if endpoint == "/net" and "asn__in" in params:
         asn_list = params["asn__in"].split(",")
-        chunk_size = 250  # Reduzido para 50 para evitar atingir o limite de requisições
+        chunk_size = 250  # Reduced to 250 to avoid hitting the request limit
         for i in range(0, len(asn_list), chunk_size):
             chunk = asn_list[i:i + chunk_size]
             params_copy = params.copy()
@@ -88,11 +88,11 @@ def fetch_data_chunk(endpoint: str, params: Dict) -> List[Dict]:
             break
         all_data.extend(data)
         skip += 250
-        print(f"Paginação: {skip}")
+        print(f"Pagination: {skip}")
     return all_data
 
 def save_csv(data: Dict, filename: str, mode='a'):
-    print(f"""Adicionando dados ao arquivo CSV: {filename}""")
+    print(f"""Adding data to CSV file: {filename}""")
     file_exists = os.path.isfile(f"output/peeringdb_{filename}.csv")
     
     with open(f"output/peeringdb_{filename}.csv", mode, newline="") as f:
@@ -103,7 +103,7 @@ def save_csv(data: Dict, filename: str, mode='a'):
 
 
 def merge_data(data1: List[Dict], data2: List[Dict], key1: str, key2: str) -> List[Dict]:
-    print("""Função para mesclar dois conjuntos de dados.""")
+    print("""Function to merge two datasets.""")
     merged = []
     data2_dict = {item[key2]: item for item in data2}
     for item in data1:
@@ -114,10 +114,10 @@ def merge_data(data1: List[Dict], data2: List[Dict], key1: str, key2: str) -> Li
     return merged
 
 def load_csv_data(filename: str) -> List[Dict]:
-    print(f"Carregando dados do arquivo CSV: {filename}")
+    print(f"Loading data from CSV file: {filename}")
     file_path = f"output/peeringdb_{filename}.csv"
     if not os.path.exists(file_path):
-        print(f"Arquivo {file_path} não encontrado.")
+        print(f"File {file_path} not found.")
         return []
     df = pd.read_csv(file_path)
     return df.to_dict('records')
