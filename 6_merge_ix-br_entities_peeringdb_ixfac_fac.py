@@ -19,9 +19,15 @@ peeringdb_df['dominio_extraido'] = peeringdb_df['dominio_extraido'].str.lower()
 ixbr_df['Domínio'] = ixbr_df['Domínio'].str.lower()
 
 # Fazer o merge das tabelas com base na coluna de domínio
-merged_df = pd.merge(peeringdb_df, ixbr_df, left_on='dominio_extraido', right_on='Domínio', how='inner')
+merged_df = pd.merge(peeringdb_df, ixbr_df, left_on='dominio_extraido', right_on='Domínio', how='outer')
+
+# Preencher valores NaN com uma string vazia
+merged_df = merged_df.fillna('')
 
 # Salvar o resultado em um novo CSV
 merged_df.to_csv('output/merged_data.csv', index=False)
 
 print("Merge concluído! O arquivo 'merged_data.csv' foi gerado.")
+print(f"Total de linhas no arquivo final: {len(merged_df)}")
+print(f"Total de linhas no arquivo PeeringDB: {len(peeringdb_df)}")
+print(f"Total de linhas no arquivo IX.br: {len(ixbr_df)}")
