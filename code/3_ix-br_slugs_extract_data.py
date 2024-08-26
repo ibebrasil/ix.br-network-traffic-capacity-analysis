@@ -15,7 +15,7 @@ def get_city_info(url):
     select = soup.find('select', {'id': 'router'})
     
     if not select:
-        print("Não foi possível encontrar o elemento select com id 'router' na página.")
+        print("Não foi possível encontrar o elemento select na página.")
         return []
     
     options = select.find_all('option')
@@ -24,7 +24,7 @@ def get_city_info(url):
         if option.get('value'):
             value = option['value']
             city_uf = option.text.strip()
-            city_code = value
+            city_code = value.split('/')[-1]
             city_info.append((city_code, city_uf))
     
     return city_info

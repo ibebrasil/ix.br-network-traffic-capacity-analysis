@@ -3,7 +3,7 @@ numpy>=1.23.5,<2.0.0
 python-dotenv>=0.21.0
 beautifulsoup4
 langchain
-openai
+openai==0.28
 python-dotenv
 langchain_openai
 pandas
