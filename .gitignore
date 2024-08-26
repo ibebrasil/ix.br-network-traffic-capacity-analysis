@@ -35,3 +35,6 @@ Thumbs.db
 *.tmp
 .aider*
 .checkpoint.json
+code/.checkpoint.json
+
+output/*
