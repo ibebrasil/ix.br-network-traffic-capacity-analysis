@@ -1,12 +1,12 @@
 # Ignore all JSON files
-output/*.json
+/code/output/*.json
 *.json
 
 # Ignore all CSV files
-output/*.csv
+code/output/*.csv
 *.csv
 
-output/img/*.png
+code/output/img/*.png
 
 
 # Python-related files
