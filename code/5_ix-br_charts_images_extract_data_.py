@@ -84,7 +84,7 @@ def process_single_image(args):
     index, row, image_dir = args
     slug = row['Slug']
     city_code = row['Sigla da Cidade']
-    image_path = os.path.join(image_dir, f"pix__{city_code}__{slug}__bps__monthly.png")
+    image_path = os.path.join(image_dir, f"pix__{city_code}__{slug}__bps__daily.png")
     
     if is_row_processed(row):
         return index, None, "skipped"
