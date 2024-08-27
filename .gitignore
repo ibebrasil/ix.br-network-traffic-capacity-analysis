@@ -1,10 +1,8 @@
 # Ignore all JSON files
 /code/output/*.json
-*.json
 
 # Ignore all CSV files
 code/output/*.csv
-*.csv
 
 code/output/img/*.png
 
@@ -37,4 +35,3 @@ Thumbs.db
 .checkpoint.json
 code/.checkpoint.json
 
-output/*
