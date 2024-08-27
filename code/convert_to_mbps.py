@@ -7,13 +7,14 @@ def convert_to_mbps(value, unit):
     try:
         value = float(value)
         if unit == 'Gbps':
-            return value * 1000
+            result = value * 1000
         elif unit == 'Tbps':
-            return value * 1000000
+            result = value * 1000000
         elif unit == 'Kbps':
-            return value / 1000
+            result = value / 1000
         else:  # Mbps ou desconhecido
-            return value
+            result = value
+        return f"{result:.2f}".replace('.', ',')
     except ValueError:
         return ''  # Retorna uma string vazia se não puder converter
 
@@ -38,6 +39,8 @@ def process_csv(input_file, output_file):
             # Remove os campos '_Unit'
             row = {k: v for k, v in row.items() if not k.endswith('_Unit')}
             writer.writerow(row)
+
+    print(f"Conversão concluída. Os valores foram convertidos para Mbps e as casas decimais foram formatadas com vírgula.")
 
 def main():
     input_file = 'output/ix-br_slugs_data_processed.csv'
