@@ -91,9 +91,12 @@ def fetch_data_chunk(endpoint: str, params: Dict) -> List[Dict]:
         print(f"Pagination: {skip}")
     return all_data
 
-def save_csv(data: Dict, filename: str, mode='a'):
+def save_csv(data: Dict, filename: str, mode='a', ix_name_mapping=None):
     print(f"""Adding data to CSV file: {filename}""")
     file_exists = os.path.isfile(f"output/peeringdb_{filename}.csv")
+    
+    if filename == "ixfac_data" and ix_name_mapping:
+        data['ix_name'] = ix_name_mapping.get(data['ix_id'], '')
     
     with open(f"output/peeringdb_{filename}.csv", mode, newline="") as f:
         writer = csv.DictWriter(f, fieldnames=data.keys())
@@ -122,6 +125,10 @@ def load_csv_data(filename: str) -> List[Dict]:
     df = pd.read_csv(file_path)
     return df.to_dict('records')
 
+def create_ix_name_mapping():
+    ix_data = load_csv_data("ix_data")
+    return {ix['id']: ix['name'] for ix in ix_data}
+
 def main():
     checkpoint = load_checkpoint()
     current_step = checkpoint["step"]
@@ -140,8 +147,9 @@ def main():
         if current_step <= 2:
             print("# 2. Query /ixfac for each 'id' in ix_data")
             ixfac_data = fetch_data("/ixfac", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
+            ix_name_mapping = create_ix_name_mapping()
             for ixfac in ixfac_data:
-                save_csv(ixfac, "ixfac_data")
+                save_csv(ixfac, "ixfac_data", ix_name_mapping=ix_name_mapping)
             progress["fac_ids"] = list(set(ixfac["fac_id"] for ixfac in ixfac_data))
             current_step = 3
             save_checkpoint(current_step, progress)
