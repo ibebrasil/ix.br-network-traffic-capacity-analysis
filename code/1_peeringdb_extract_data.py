@@ -95,7 +95,7 @@ def save_csv(data: Dict, filename: str, mode='a', ix_name_mapping=None):
     print(f"""Adding data to CSV file: {filename}""")
     file_exists = os.path.isfile(f"output/peeringdb_{filename}.csv")
     
-    if filename == "ixfac_data" and ix_name_mapping:
+    if (filename == "ixfac_data" or filename == "netixlan_data") and ix_name_mapping:
         data['ix_name'] = ix_name_mapping.get(data['ix_id'], '')
     
     with open(f"output/peeringdb_{filename}.csv", mode, newline="") as f:
@@ -182,8 +182,9 @@ def main():
         if current_step <= 5:
             print("# 5. Query /netixlan for each 'id' in ix_data")
             netixlan_data = fetch_data("/netixlan", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
+            ix_name_mapping = create_ix_name_mapping()
             for netixlan in netixlan_data:
-                save_csv(netixlan, "netixlan_data")
+                save_csv(netixlan, "netixlan_data", ix_name_mapping=ix_name_mapping)
             progress["asns"] = list(set(netixlan["asn"] for netixlan in netixlan_data))
             current_step = 6
             save_checkpoint(current_step, progress)
