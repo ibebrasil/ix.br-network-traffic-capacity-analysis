@@ -533,6 +533,7 @@ Esta parte do projeto consiste em vários scripts (2 a 7) que extraem e processa
 6. **7_ix-br_topologymap_images_extract_data.py**
    - Extrai dados das imagens de mapas de topologia
    - Funções similares ao script 5, mas focadas em mapas de topologia
+   **OBS: O modelo de IA utilizado não conseguiu extrair com precisão os dados dessas imagens, então não utilizamos os dados extraídos automaticamente e realizamos extração manual para o projeto**
 
 ### Fluxo de Trabalho Geral
 
