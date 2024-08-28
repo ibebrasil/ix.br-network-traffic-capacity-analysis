@@ -4,7 +4,8 @@
 # Ignore all CSV files
 code/output/*.csv
 
-code/output/img/*.png
+code/output/img/topologymap/*.png
+code/output/img/charts/*.png
 
 
 # Python-related files

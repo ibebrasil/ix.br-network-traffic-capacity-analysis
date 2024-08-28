@@ -104,7 +104,7 @@ def process_single_image(args):
 def main():
     input_csv_path = "output/ix-br_slugs_data.csv"
     output_csv_path = "output/ix-br_slugs_data_processed.csv"
-    image_dir = "output/img/"
+    image_dir = "output/img/charts"
 
     if os.path.exists(output_csv_path):
         logging.info(f"Output CSV file already exists. Reading from {output_csv_path}")
@@ -134,6 +134,593 @@ def main():
             index, extracted_data, status = future.result()
             if status == "success":
                 df = update_csv(df, extracted_data, df.loc[index, 'Slug'])
+                processed_images += 1
+            elif status == "skipped":
+                skipped_images += 1
+            else:
+                errors += 1
+            
+            if processed_images % 10 == 0:
+                df.to_csv(output_csv_path, index=False)
+                logging.info(f"CSV file saved. Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+
+    df.to_csv(output_csv_path, index=False)
+    logging.info(f"Processing complete. Total images: {total_images}, Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+    logging.info(f"CSV file updated: {output_csv_path}")
+
+if __name__ == "__main__":
+    main()
+import os
+import csv
+from datetime import date
+import base64
+from dotenv import load_dotenv
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
+import pandas as pd
+import time
+import logging
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get API key from environment variable
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("No OpenAI API key found. Please check your .env file.")
+
+# Configuration
+MAX_RETRIES = 3
+RETRY_DELAY = 5  # seconds
+MAX_WORKERS = 4  # Number of parallel processes
+
+# Initialize the ChatOpenAI model
+chat = ChatOpenAI(model="gpt-4-vision-preview", max_tokens=300)
+
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+def process_image(image_path):
+    base64_image = encode_image(image_path)
+    
+    messages = [
+        SystemMessage(content="You are an AI assistant that analyzes topology map images and extracts specific data from them."),
+        HumanMessage(content=[
+            {"type": "text", "text": "Extract the following data from this topology map image:\n"
+             "PIX-A: <name>\n"
+             "Download_value: <value><unit>\n"
+             "Download_percentage: <percentage>%\n"
+             "Upload_value: <value><unit>\n"
+             "Upload_percentage: <percentage>%\n"
+             "PIX-B: <name>\n"
+             "Where <name> is the name of the PIX, <value> is a number, <unit> is K, M, G, or T, and <percentage> is a number.\n"
+             "If percentage is not available in the image, use '-' as the value.\n"
+             "If there are multiple connections, provide data for the one with the highest download value.\n"
+             "Respond only with the extracted data in the exact format specified, nothing else."},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+        ])
+    ]
+    
+    response = chat(messages)
+    return response.content
+
+def update_csv(df, extracted_data, city_code):
+    lines = extracted_data.strip().split('\n')
+    data = {}
+    for line in lines:
+        key, value = line.split(': ')
+        data[key] = value
+    
+    update_data = {
+        'Sigla da Cidade': city_code,
+        'PIX-A': data['PIX-A'],
+        'Download_valor': data['Download_value'],
+        'Download_porcentagem': data['Download_percentage'],
+        'Upload_valor': data['Upload_value'],
+        'Upload_porcentagem': data['Upload_percentage'],
+        'PIX-B': data['PIX-B'],
+        'Extraction_Date': date.today().isoformat()
+    }
+    
+    df = df.append(update_data, ignore_index=True)
+    return df
+
+def is_row_processed(df, city_code):
+    return not df[df['Sigla da Cidade'] == city_code].empty
+
+def process_single_image(args):
+    city_code, image_dir = args
+    image_path = os.path.join(image_dir, f"pix__{city_code}__topology.png")
+    
+    if not os.path.exists(image_path):
+        return city_code, None, "error"
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            extracted_data = process_image(image_path)
+            return city_code, extracted_data, "success"
+        except Exception as e:
+            if attempt == MAX_RETRIES - 1:
+                return city_code, None, f"error: {str(e)}"
+            time.sleep(RETRY_DELAY)
+
+def main():
+    input_csv_path = "output/ix-br_slugs_data.csv"
+    output_csv_path = "output/ix-br_topologymaps_data.csv"
+    image_dir = "output/img/topologymaps"
+
+    if os.path.exists(output_csv_path):
+        logging.info(f"Output CSV file already exists. Reading from {output_csv_path}")
+        df = pd.read_csv(output_csv_path)
+    else:
+        logging.info(f"Output CSV file does not exist. Creating new DataFrame")
+        df = pd.DataFrame(columns=['Sigla da Cidade', 'PIX-A', 'Download_valor', 'Download_porcentagem',
+                                   'Upload_valor', 'Upload_porcentagem', 'PIX-B', 'Extraction_Date'])
+
+    input_df = pd.read_csv(input_csv_path)
+    city_codes = input_df['Sigla da Cidade'].unique()
+
+    total_images = len(city_codes)
+    logging.info(f"Starting processing of {total_images} images...")
+
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_single_image, (city_code, image_dir)) for city_code in city_codes]
+        
+        processed_images = 0
+        skipped_images = 0
+        errors = 0
+        
+        for future in tqdm(as_completed(futures), total=total_images, desc="Processing Images"):
+            city_code, extracted_data, status = future.result()
+            if status == "success":
+                df = update_csv(df, extracted_data, city_code)
+                processed_images += 1
+            elif status == "skipped":
+                skipped_images += 1
+            else:
+                errors += 1
+            
+            if processed_images % 10 == 0:
+                df.to_csv(output_csv_path, index=False)
+                logging.info(f"CSV file saved. Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+
+    df.to_csv(output_csv_path, index=False)
+    logging.info(f"Processing complete. Total images: {total_images}, Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+    logging.info(f"CSV file updated: {output_csv_path}")
+
+if __name__ == "__main__":
+    main()
+import os
+import csv
+from datetime import date
+import base64
+from dotenv import load_dotenv
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
+import pandas as pd
+import time
+import logging
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get API key from environment variable
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("No OpenAI API key found. Please check your .env file.")
+
+# Configuration
+MAX_RETRIES = 3
+RETRY_DELAY = 5  # seconds
+MAX_WORKERS = 4  # Number of parallel processes
+
+# Initialize the ChatOpenAI model
+chat = ChatOpenAI(model="gpt-4-vision-preview", max_tokens=300)
+
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+def process_image(image_path):
+    base64_image = encode_image(image_path)
+    
+    messages = [
+        SystemMessage(content="You are an AI assistant that analyzes topology map images and extracts specific data from them."),
+        HumanMessage(content=[
+            {"type": "text", "text": "Extract the following data from this topology map image:\n"
+             "PIX-A: <name>\n"
+             "Download_valor: <value><unit>\n"
+             "Download_porcentagem: <percentage>%\n"
+             "Upload_valor: <value><unit>\n"
+             "Upload_porcentagem: <percentage>%\n"
+             "PIX-B: <name>\n"
+             "Where <name> is the name of the PIX, <value> is a number, <unit> is K, M, G, or T, and <percentage> is a number.\n"
+             "If percentage is not available in the image, use the value from the legend based on the arrow color.\n"
+             "If there are multiple connections, provide data for the one with the highest download value.\n"
+             "For 1-to-N or 1-to-'PIX Central' topologies, focus on the main connection.\n"
+             "Respond only with the extracted data in the exact format specified, nothing else."},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+        ])
+    ]
+    
+    response = chat(messages)
+    return response.content
+
+def update_csv(df, extracted_data, city_code):
+    lines = extracted_data.strip().split('\n')
+    data = {}
+    for line in lines:
+        key, value = line.split(': ')
+        data[key] = value
+    
+    update_data = {
+        'Sigla da Cidade': city_code,
+        'PIX-A': data['PIX-A'],
+        'Download_valor': data['Download_valor'],
+        'Download_porcentagem': data['Download_porcentagem'],
+        'Upload_valor': data['Upload_valor'],
+        'Upload_porcentagem': data['Upload_porcentagem'],
+        'PIX-B': data['PIX-B'],
+        'Extraction_Date': date.today().isoformat()
+    }
+    
+    df = df.append(update_data, ignore_index=True)
+    return df
+
+def is_row_processed(df, city_code):
+    return not df[df['Sigla da Cidade'] == city_code].empty
+
+def process_single_image(args):
+    city_code, image_dir = args
+    image_path = os.path.join(image_dir, f"pix__{city_code}__topology.png")
+    
+    if not os.path.exists(image_path):
+        return city_code, None, "error"
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            extracted_data = process_image(image_path)
+            return city_code, extracted_data, "success"
+        except Exception as e:
+            if attempt == MAX_RETRIES - 1:
+                return city_code, None, f"error: {str(e)}"
+            time.sleep(RETRY_DELAY)
+
+def main():
+    input_csv_path = "output/ix-br_slugs_data.csv"
+    output_csv_path = "output/ix-br_topologymaps_data.csv"
+    image_dir = "output/img/topologymaps"
+
+    if os.path.exists(output_csv_path):
+        logging.info(f"Output CSV file already exists. Reading from {output_csv_path}")
+        df = pd.read_csv(output_csv_path)
+    else:
+        logging.info(f"Output CSV file does not exist. Creating new DataFrame")
+        df = pd.DataFrame(columns=['Sigla da Cidade', 'PIX-A', 'Download_valor', 'Download_porcentagem',
+                                   'Upload_valor', 'Upload_porcentagem', 'PIX-B', 'Extraction_Date'])
+
+    input_df = pd.read_csv(input_csv_path)
+    city_codes = input_df['Sigla da Cidade'].unique()
+
+    total_images = len(city_codes)
+    logging.info(f"Starting processing of {total_images} images...")
+
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_single_image, (city_code, image_dir)) for city_code in city_codes]
+        
+        processed_images = 0
+        skipped_images = 0
+        errors = 0
+        
+        for future in tqdm(as_completed(futures), total=total_images, desc="Processing Images"):
+            city_code, extracted_data, status = future.result()
+            if status == "success":
+                df = update_csv(df, extracted_data, city_code)
+                processed_images += 1
+            elif status == "skipped":
+                skipped_images += 1
+            else:
+                errors += 1
+            
+            if processed_images % 10 == 0:
+                df.to_csv(output_csv_path, index=False)
+                logging.info(f"CSV file saved. Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+
+    df.to_csv(output_csv_path, index=False)
+    logging.info(f"Processing complete. Total images: {total_images}, Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+    logging.info(f"CSV file updated: {output_csv_path}")
+
+if __name__ == "__main__":
+    main()
+import os
+import csv
+from datetime import date
+import base64
+from dotenv import load_dotenv
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
+import pandas as pd
+import time
+import logging
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get API key from environment variable
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("No OpenAI API key found. Please check your .env file.")
+
+# Configuration
+MAX_RETRIES = 3
+RETRY_DELAY = 5  # seconds
+MAX_WORKERS = 4  # Number of parallel processes
+
+# Initialize the ChatOpenAI model
+chat = ChatOpenAI(model="gpt-4-vision-preview", max_tokens=300)
+
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+def process_image(image_path):
+    base64_image = encode_image(image_path)
+    
+    messages = [
+        SystemMessage(content="You are an AI assistant that analyzes topology map images and extracts specific data from them."),
+        HumanMessage(content=[
+            {"type": "text", "text": "Extract the following data from this topology map image:\n"
+             "PIX-A: <name>\n"
+             "Download_valor: <value><unit>\n"
+             "Download_porcentagem: <percentage>%\n"
+             "Upload_valor: <value><unit>\n"
+             "Upload_porcentagem: <percentage>%\n"
+             "PIX-B: <name>\n"
+             "Where <name> is the name of the PIX, <value> is a number, <unit> is K, M, G, or T, and <percentage> is a number.\n"
+             "If percentage is not available in the image, use the value from the legend based on the arrow color.\n"
+             "If there are multiple connections, provide data for the one with the highest download value.\n"
+             "For 1-to-N or 1-to-'PIX Central' topologies, focus on the main connection.\n"
+             "Respond only with the extracted data in the exact format specified, nothing else."},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+        ])
+    ]
+    
+    response = chat(messages)
+    return response.content
+
+def update_csv(df, extracted_data, city_code):
+    lines = extracted_data.strip().split('\n')
+    data = {}
+    for line in lines:
+        key, value = line.split(': ')
+        data[key] = value
+    
+    update_data = {
+        'Sigla da Cidade': city_code,
+        'PIX-A': data['PIX-A'],
+        'Download_valor': data['Download_valor'],
+        'Download_porcentagem': data['Download_porcentagem'],
+        'Upload_valor': data['Upload_valor'],
+        'Upload_porcentagem': data['Upload_porcentagem'],
+        'PIX-B': data['PIX-B'],
+        'Extraction_Date': date.today().isoformat()
+    }
+    
+    df = df.append(update_data, ignore_index=True)
+    return df
+
+def is_row_processed(df, city_code):
+    return not df[df['Sigla da Cidade'] == city_code].empty
+
+def process_single_image(args):
+    city_code, image_dir = args
+    image_path = os.path.join(image_dir, f"pix__{city_code}__topology.png")
+    
+    if not os.path.exists(image_path):
+        return city_code, None, "error"
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            extracted_data = process_image(image_path)
+            return city_code, extracted_data, "success"
+        except Exception as e:
+            if attempt == MAX_RETRIES - 1:
+                return city_code, None, f"error: {str(e)}"
+            time.sleep(RETRY_DELAY)
+
+def main():
+    input_csv_path = "output/ix-br_slugs_data.csv"
+    output_csv_path = "output/ix-br_topologymaps_data.csv"
+    image_dir = "output/img/topologymaps"
+
+    if os.path.exists(output_csv_path):
+        logging.info(f"Output CSV file already exists. Reading from {output_csv_path}")
+        df = pd.read_csv(output_csv_path)
+    else:
+        logging.info(f"Output CSV file does not exist. Creating new DataFrame")
+        df = pd.DataFrame(columns=['Sigla da Cidade', 'PIX-A', 'Download_valor', 'Download_porcentagem',
+                                   'Upload_valor', 'Upload_porcentagem', 'PIX-B', 'Extraction_Date'])
+
+    input_df = pd.read_csv(input_csv_path)
+    city_codes = input_df['Sigla da Cidade'].unique()
+
+    total_images = len(city_codes)
+    logging.info(f"Starting processing of {total_images} images...")
+
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_single_image, (city_code, image_dir)) for city_code in city_codes]
+        
+        processed_images = 0
+        skipped_images = 0
+        errors = 0
+        
+        for future in tqdm(as_completed(futures), total=total_images, desc="Processing Images"):
+            city_code, extracted_data, status = future.result()
+            if status == "success":
+                df = update_csv(df, extracted_data, city_code)
+                processed_images += 1
+            elif status == "skipped":
+                skipped_images += 1
+            else:
+                errors += 1
+            
+            if processed_images % 10 == 0:
+                df.to_csv(output_csv_path, index=False)
+                logging.info(f"CSV file saved. Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+
+    df.to_csv(output_csv_path, index=False)
+    logging.info(f"Processing complete. Total images: {total_images}, Processed: {processed_images}, Skipped: {skipped_images}, Errors: {errors}")
+    logging.info(f"CSV file updated: {output_csv_path}")
+
+if __name__ == "__main__":
+    main()
+import os
+import csv
+from datetime import date
+import base64
+from dotenv import load_dotenv
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
+import pandas as pd
+import time
+import logging
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get API key from environment variable
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("No OpenAI API key found. Please check your .env file.")
+
+# Configuration
+MAX_RETRIES = 3
+RETRY_DELAY = 5  # seconds
+MAX_WORKERS = 4  # Number of parallel processes
+
+# Initialize the ChatOpenAI model
+chat = ChatOpenAI(model="gpt-4-vision-preview", max_tokens=300)
+
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+def process_image(image_path):
+    base64_image = encode_image(image_path)
+    
+    messages = [
+        SystemMessage(content="You are an AI assistant that analyzes topology map images and extracts specific data from them."),
+        HumanMessage(content=[
+            {"type": "text", "text": "Extract the following data from this topology map image:\n"
+             "PIX-A: <name>\n"
+             "Download_valor: <value><unit>\n"
+             "Download_porcentagem: <percentage>%\n"
+             "Upload_valor: <value><unit>\n"
+             "Upload_porcentagem: <percentage>%\n"
+             "PIX-B: <name>\n"
+             "Where <name> is the name of the PIX, <value> is a number, <unit> is K, M, G, or T, and <percentage> is a number.\n"
+             "If percentage is not available in the image, use the value from the legend based on the arrow color.\n"
+             "If there are multiple connections, provide data for the one with the highest download value.\n"
+             "For 1-to-N or 1-to-'PIX Central' topologies, focus on the main connection.\n"
+             "Respond only with the extracted data in the exact format specified, nothing else."},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+        ])
+    ]
+    
+    response = chat(messages)
+    return response.content
+
+def update_csv(df, extracted_data, city_code):
+    lines = extracted_data.strip().split('\n')
+    data = {}
+    for line in lines:
+        key, value = line.split(': ')
+        data[key] = value
+    
+    update_data = {
+        'Sigla da Cidade': city_code,
+        'PIX-A': data['PIX-A'],
+        'Download_valor': data['Download_valor'],
+        'Download_porcentagem': data['Download_porcentagem'],
+        'Upload_valor': data['Upload_valor'],
+        'Upload_porcentagem': data['Upload_porcentagem'],
+        'PIX-B': data['PIX-B'],
+        'Extraction_Date': date.today().isoformat()
+    }
+    
+    df = df.append(update_data, ignore_index=True)
+    return df
+
+def is_row_processed(df, city_code):
+    return not df[df['Sigla da Cidade'] == city_code].empty
+
+def process_single_image(args):
+    city_code, image_dir = args
+    image_path = os.path.join(image_dir, f"pix__{city_code}__topology.png")
+    
+    if not os.path.exists(image_path):
+        return city_code, None, "error"
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            extracted_data = process_image(image_path)
+            return city_code, extracted_data, "success"
+        except Exception as e:
+            if attempt == MAX_RETRIES - 1:
+                return city_code, None, f"error: {str(e)}"
+            time.sleep(RETRY_DELAY)
+
+def main():
+    input_csv_path = "output/ix-br_slugs_data.csv"
+    output_csv_path = "output/ix-br_topologymaps_data.csv"
+    image_dir = "output/img/topologymaps"
+
+    if os.path.exists(output_csv_path):
+        logging.info(f"Output CSV file already exists. Reading from {output_csv_path}")
+        df = pd.read_csv(output_csv_path)
+    else:
+        logging.info(f"Output CSV file does not exist. Creating new DataFrame")
+        df = pd.DataFrame(columns=['Sigla da Cidade', 'PIX-A', 'Download_valor', 'Download_porcentagem',
+                                   'Upload_valor', 'Upload_porcentagem', 'PIX-B', 'Extraction_Date'])
+
+    input_df = pd.read_csv(input_csv_path)
+    city_codes = input_df['Sigla da Cidade'].unique()
+
+    total_images = len(city_codes)
+    logging.info(f"Starting processing of {total_images} images...")
+
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_single_image, (city_code, image_dir)) for city_code in city_codes]
+        
+        processed_images = 0
+        skipped_images = 0
+        errors = 0
+        
+        for future in tqdm(as_completed(futures), total=total_images, desc="Processing Images"):
+            city_code, extracted_data, status = future.result()
+            if status == "success":
+                df = update_csv(df, extracted_data, city_code)
                 processed_images += 1
             elif status == "skipped":
                 skipped_images += 1
