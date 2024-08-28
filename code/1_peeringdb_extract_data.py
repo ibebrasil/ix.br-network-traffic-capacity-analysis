@@ -14,6 +14,7 @@ secret_key = os.getenv('SECRET_KEY')
 
 MAX_RETRIES = 3
 INITIAL_BACKOFF = 10  # seconds
+MAX_IDS_PER_REQUEST = 100  # Limite máximo de IDs por requisição
 
 # Global settings
 API_BASE_URL = "https://www.peeringdb.com/api"
@@ -59,23 +60,7 @@ def fetch_with_retry(url: str, params: Dict) -> requests.Response:
                 raise
 
 def fetch_data(endpoint: str, params: Dict) -> List[Dict]:
-    print("""Function to fetch data from the API with pagination.""")
-    all_data = []
-
-    # If the endpoint is "/net" and there's "asn__in" in the parameters, we divide into smaller groups
-    if endpoint == "/net" and "asn__in" in params:
-        asn_list = params["asn__in"].split(",")
-        chunk_size = 250  # Reduced to 250 to avoid hitting the request limit
-        for i in range(0, len(asn_list), chunk_size):
-            chunk = asn_list[i:i + chunk_size]
-            params_copy = params.copy()
-            params_copy["asn__in"] = ",".join(chunk)
-            all_data.extend(fetch_data_chunk(endpoint, params_copy))
-        return all_data
-
-    return fetch_data_chunk(endpoint, params)
-
-def fetch_data_chunk(endpoint: str, params: Dict) -> List[Dict]:
+    print(f"Fetching data from {endpoint} with params: {params}")
     all_data = []
     skip = 0
     while True:
@@ -91,43 +76,23 @@ def fetch_data_chunk(endpoint: str, params: Dict) -> List[Dict]:
         print(f"Pagination: {skip}")
     return all_data
 
-def save_csv(data: Dict, filename: str, mode='a', ix_name_mapping=None):
-    print(f"""Adding data to CSV file: {filename}""")
-    file_exists = os.path.isfile(f"output/peeringdb_{filename}.csv")
-    
-    if (filename == "ixfac_data" or filename == "netixlan_data") and ix_name_mapping:
-        data['ix_name'] = ix_name_mapping.get(data['ix_id'], '')
-    
-    with open(f"output/peeringdb_{filename}.csv", mode, newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=data.keys())
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(data)
+def fetch_data_in_batches(endpoint: str, id_param: str, ids: List[int]) -> List[Dict]:
+    all_data = []
+    for i in range(0, len(ids), MAX_IDS_PER_REQUEST):
+        batch_ids = ids[i:i + MAX_IDS_PER_REQUEST]
+        params = {id_param: ",".join(map(str, batch_ids))}
+        all_data.extend(fetch_data(endpoint, params))
+    return all_data
 
-
-def merge_data(data1: List[Dict], data2: List[Dict], key1: str, key2: str) -> List[Dict]:
-    print("""Function to merge two datasets.""")
-    merged = []
-    data2_dict = {item[key2]: item for item in data2}
-    for item in data1:
-        merged_item = item.copy()
-        if item[key1] in data2_dict:
-            merged_item.update(data2_dict[item[key1]])
-        merged.append(merged_item)
-    return merged
-
-def load_csv_data(filename: str) -> List[Dict]:
-    print(f"Loading data from CSV file: {filename}")
-    file_path = f"output/peeringdb_{filename}.csv"
-    if not os.path.exists(file_path):
-        print(f"File {file_path} not found.")
-        return []
-    df = pd.read_csv(file_path)
-    return df.to_dict('records')
-
-def create_ix_name_mapping():
-    ix_data = load_csv_data("ix_data")
-    return {ix['id']: ix['name'] for ix in ix_data}
+def save_csv(data: List[Dict], filename: str):
+    print(f"Saving data to CSV file: {filename}")
+    if not data:
+        print(f"No data to save for {filename}")
+        return
+    with open(f"output/peeringdb_{filename}.csv", 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=data[0].keys())
+        writer.writeheader()
+        writer.writerows(data)
 
 def main():
     checkpoint = load_checkpoint()
@@ -136,90 +101,129 @@ def main():
 
     try:
         if current_step <= 1:
-            print("# 1. Download all /ix with parameter 'country__in=BR'")
-            ix_data = fetch_data("/ix", {"country__in": "BR"})
-            for ix in ix_data:
-                save_csv(ix, "ix_data")
+            print("# 1. Consultar IXs do Brasil")
+            ix_data = fetch_data("/ix", {"country": "BR"})
+            save_csv(ix_data, "ix_data")
             progress["ix_ids"] = [ix["id"] for ix in ix_data]
             current_step = 2
             save_checkpoint(current_step, progress)
 
         if current_step <= 2:
-            print("# 2. Query /ixfac for each 'id' in ix_data")
-            ixfac_data = fetch_data("/ixfac", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
-            ix_name_mapping = create_ix_name_mapping()
-            for ixfac in ixfac_data:
-                save_csv(ixfac, "ixfac_data", ix_name_mapping=ix_name_mapping)
-            progress["fac_ids"] = list(set(ixfac["fac_id"] for ixfac in ixfac_data))
+            print("# 2. Consultar IXLANs associadas aos IXs do Brasil")
+            ixlan_data = fetch_data_in_batches("/ixlan", "ix_id__in", progress["ix_ids"])
+            save_csv(ixlan_data, "ixlan_data")
+            progress["ixlan_ids"] = [ixlan["id"] for ixlan in ixlan_data]
             current_step = 3
             save_checkpoint(current_step, progress)
 
         if current_step <= 3:
-            print("# 3. Query /fac for each 'fac_id' in ixfac_data")
-            fac_data = fetch_data("/fac", {"id__in": ",".join(map(str, progress["fac_ids"]))})
-            for fac in fac_data:
-                save_csv(fac, "fac_data")
+            print("# 3. Consultar NETIXLANs associadas às IXLANs")
+            netixlan_data = fetch_data_in_batches("/netixlan", "ixlan_id__in", progress["ixlan_ids"])
+            save_csv(netixlan_data, "netixlan_data")
             current_step = 4
             save_checkpoint(current_step, progress)
 
         if current_step <= 4:
-            print("# 4. Merge IXFAC and FAC data")
-            ixfac_data = load_csv_data("ixfac_data")
-            fac_data = load_csv_data("fac_data")
-            
-            merged_ixfac_fac = merge_data(ixfac_data, fac_data, "fac_id", "id")
-            
-            # Clear existing CSV file before adding new data
-            with open("output/peeringdb_merged_ixfac_fac_data.csv", 'w', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=merged_ixfac_fac[0].keys())
-                writer.writeheader()
-                writer.writerows(merged_ixfac_fac)
-            
-            print(f"CSV file 'merged_ixfac_fac_data' generated with {len(merged_ixfac_fac)} records.")
+            print("# 4. Consultar FACs do Brasil")
+            fac_data = fetch_data("/fac", {"country": "BR"})
+            save_csv(fac_data, "fac_data")
+            progress["fac_ids"] = [fac["id"] for fac in fac_data]
             current_step = 5
             save_checkpoint(current_step, progress)
 
         if current_step <= 5:
-            print("# 5. Query /netixlan for each 'id' in ix_data")
-            netixlan_data = fetch_data("/netixlan", {"ix_id__in": ",".join(map(str, progress["ix_ids"]))})
-            ix_name_mapping = create_ix_name_mapping()
-            for netixlan in netixlan_data:
-                save_csv(netixlan, "netixlan_data", ix_name_mapping=ix_name_mapping)
-            progress["asns"] = list(set(netixlan["asn"] for netixlan in netixlan_data))
+            print("# 5. Consultar IXFACs associados às FACs do Brasil")
+            ixfac_data = fetch_data_in_batches("/ixfac", "fac_id__in", progress["fac_ids"])
+            save_csv(ixfac_data, "ixfac_data")
             current_step = 6
             save_checkpoint(current_step, progress)
 
         if current_step <= 6:
-            print("# 6. Query /net for each 'asn' in netixlan_data")
-            net_data = fetch_data("/net", {"asn__in": ",".join(map(str, progress["asns"]))})
-            for net in net_data:
-                save_csv(net, "net_data")
+            print("# 6. Consultar NETs associadas aos IXs e FACs do Brasil")
+            net_data = fetch_data_in_batches("/net", "ix_id__in", progress["ix_ids"])
+            net_data.extend(fetch_data_in_batches("/net", "fac_id__in", progress["fac_ids"]))
+            save_csv(net_data, "net_data")
+            progress["net_ids"] = list(set(net["id"] for net in net_data))
             current_step = 7
             save_checkpoint(current_step, progress)
 
         if current_step <= 7:
-            print("# 7. Merge NETIXLAN and NET data")
-            netixlan_data = load_csv_data("netixlan_data")
-            net_data = load_csv_data("net_data")
-            
-            merged_netixlan_net = merge_data(netixlan_data, net_data, "asn", "asn")
-            
-            # Clear existing CSV file before adding new data
-            with open("output/peeringdb_merged_netixlan_net_data.csv", 'w', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=merged_netixlan_net[0].keys())
-                writer.writeheader()
-                writer.writerows(merged_netixlan_net)
-            
-            print(f"CSV file 'merged_netixlan_net_data' generated with {len(merged_netixlan_net)} records.")
+            print("# 7. Consultar POCs associados às NETs")
+            poc_data = fetch_data_in_batches("/poc", "net_id__in", progress["net_ids"])
+            save_csv(poc_data, "poc_data")
             current_step = 8
             save_checkpoint(current_step, progress)
 
-        print("Data extraction and merging completed. CSV files have been saved.")
+        print("# 8. Construir tabela unificada")
+        build_unified_table()
+
+        print("Data extraction and unification completed. CSV files have been saved.")
 
     except Exception as e:
         print(f"An error occurred during execution at step {current_step}: {str(e)}")
         import traceback
         traceback.print_exc()
+    finally:
+        # Sempre construir a tabela unificada, independentemente de erros anteriores
+        print("# Construindo tabela unificada final")
+        build_unified_table()
+
+def build_unified_table():
+    ix_df = pd.read_csv("output/peeringdb_ix_data.csv")
+    ixlan_df = pd.read_csv("output/peeringdb_ixlan_data.csv")
+    netixlan_df = pd.read_csv("output/peeringdb_netixlan_data.csv")
+    fac_df = pd.read_csv("output/peeringdb_fac_data.csv")
+    ixfac_df = pd.read_csv("output/peeringdb_ixfac_data.csv")
+    net_df = pd.read_csv("output/peeringdb_net_data.csv")
+
+    # Selecionar colunas relevantes
+    ix_df = ix_df[['id', 'name', 'city', 'country', 'org_id']]
+    ixlan_df = ixlan_df[['id', 'ix_id', 'name']]
+    netixlan_df = netixlan_df[['id', 'net_id', 'ix_id', 'ixlan_id', 'asn', 'ipaddr4', 'ipaddr6', 'speed']]
+    fac_df = fac_df[['id', 'name', 'city', 'country', 'org_id']]
+    ixfac_df = ixfac_df[['id', 'ix_id', 'fac_id']]
+    net_df = net_df[['id', 'name', 'asn', 'info_type', 'policy_general']]
+
+    # Mesclar dataframes
+    merged_df = netixlan_df.merge(ixlan_df, left_on='ixlan_id', right_on='id', suffixes=('', '_ixlan'))
+    merged_df = merged_df.merge(ix_df, left_on='ix_id', right_on='id', suffixes=('', '_ix'))
+    merged_df = merged_df.merge(ixfac_df, on='ix_id', suffixes=('', '_ixfac'))
+    merged_df = merged_df.merge(fac_df, left_on='fac_id', right_on='id', suffixes=('', '_fac'))
+    merged_df = merged_df.merge(net_df, left_on='net_id', right_on='id', suffixes=('', '_net'))
+
+    # Renomear colunas para evitar ambiguidades e remover duplicatas
+    column_mapping = {
+        'id': 'netixlan_id',
+        'id_ixlan': 'ixlan_id',
+        'id_ix': 'ix_id',
+        'id_ixfac': 'ixfac_id',
+        'id_fac': 'fac_id',
+        'id_net': 'net_id',
+        'name': 'netixlan_name',
+        'name_ixlan': 'ixlan_name',
+        'name_ix': 'ix_name',
+        'name_fac': 'fac_name',
+        'name_net': 'net_name',
+        'city': 'ix_city',
+        'city_fac': 'fac_city',
+        'country': 'ix_country',
+        'country_fac': 'fac_country',
+        'org_id': 'ix_org_id',
+        'org_id_fac': 'fac_org_id',
+        'asn': 'net_asn',
+        'asn_net': 'net_asn'
+    }
+    merged_df = merged_df.rename(columns=column_mapping)
+
+    # Remover colunas duplicadas
+    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+
+    # Remover duplicatas de linhas
+    merged_df = merged_df.drop_duplicates()
+
+    # Salvar tabela unificada
+    merged_df.to_csv("output/peeringdb_unified_data.csv", index=False)
+    print("Tabela unificada salva como 'output/peeringdb_unified_data.csv'")
 
 if __name__ == "__main__":
     main()
