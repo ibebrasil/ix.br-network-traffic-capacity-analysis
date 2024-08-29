@@ -14,16 +14,14 @@ secret_key = os.getenv('SECRET_KEY')
 
 MAX_RETRIES = 3
 INITIAL_BACKOFF = 10  # seconds
-MAX_IDS_PER_REQUEST = 100  # Limite máximo de IDs por requisição
+MAX_IDS_PER_REQUEST = 100
 
-# Global settings
 API_BASE_URL = "https://www.peeringdb.com/api"
 HEADERS = {
     "Authorization": "Api-Key " + secret_key,
     "Content-Type": "application/json"
 }
 
-# Configuration file for checkpoint
 CONFIG_FILE = ".checkpoint.json"
 
 def load_checkpoint():
@@ -33,8 +31,6 @@ def load_checkpoint():
                 return json.load(f)
             except json.JSONDecodeError:
                 print("Error decoding checkpoint file. Creating a new one.")
-    
-    # If the file doesn't exist, is empty, or has a JSON error, create a new one
     default_checkpoint = {"step": 1, "progress": {}}
     with open(CONFIG_FILE, 'w') as f:
         json.dump(default_checkpoint, f)
@@ -89,10 +85,68 @@ def save_csv(data: List[Dict], filename: str):
     if not data:
         print(f"No data to save for {filename}")
         return
+    os.makedirs("output", exist_ok=True)
     with open(f"output/peeringdb_{filename}.csv", 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=data[0].keys())
         writer.writeheader()
         writer.writerows(data)
+
+def build_unified_table():
+    print("Building unified table...")
+    ix_df = pd.read_csv("output/peeringdb_ix_data.csv")
+    ixlan_df = pd.read_csv("output/peeringdb_ixlan_data.csv")
+    netixlan_df = pd.read_csv("output/peeringdb_netixlan_data.csv")
+    fac_df = pd.read_csv("output/peeringdb_fac_data.csv")
+    ixfac_df = pd.read_csv("output/peeringdb_ixfac_data.csv")
+    net_df = pd.read_csv("output/peeringdb_net_data.csv")
+
+    # Selecionar colunas relevantes
+    ix_df = ix_df[['id', 'name', 'city', 'country', 'org_id']]
+    ixlan_df = ixlan_df[['id', 'ix_id', 'name']]
+    netixlan_df = netixlan_df[['id', 'net_id', 'ix_id', 'ixlan_id', 'asn', 'ipaddr4', 'ipaddr6', 'speed']]
+    fac_df = fac_df[['id', 'name', 'city', 'country', 'org_id']]
+    ixfac_df = ixfac_df[['id', 'ix_id', 'fac_id']]
+    net_df = net_df[['id', 'name', 'asn', 'info_type', 'policy_general']]
+
+    # Mesclar dataframes com left joins para manter todos os registros
+    merged_df = ix_df.merge(ixlan_df, left_on='id', right_on='ix_id', how='left', suffixes=('', '_ixlan'))
+    merged_df = merged_df.merge(netixlan_df, left_on='id', right_on='ix_id', how='left', suffixes=('', '_netixlan'))
+    merged_df = merged_df.merge(ixfac_df, left_on='id', right_on='ix_id', how='left', suffixes=('', '_ixfac'))
+    merged_df = merged_df.merge(fac_df, left_on='fac_id', right_on='id', how='left', suffixes=('', '_fac'))
+    merged_df = merged_df.merge(net_df, left_on='net_id', right_on='id', how='left', suffixes=('', '_net'))
+
+    # Renomear colunas para evitar ambiguidades
+    column_mapping = {
+        'id': 'ix_id',
+        'id_ixlan': 'ixlan_id',
+        'id_netixlan': 'netixlan_id',
+        'id_ixfac': 'ixfac_id',
+        'id_fac': 'fac_id',
+        'id_net': 'net_id',
+        'name': 'ix_name',
+        'name_ixlan': 'ixlan_name',
+        'name_fac': 'fac_name',
+        'name_net': 'net_name',
+        'city': 'ix_city',
+        'city_fac': 'fac_city',
+        'country': 'ix_country',
+        'country_fac': 'fac_country',
+        'org_id': 'ix_org_id',
+        'org_id_fac': 'fac_org_id',
+        'asn': 'net_asn',
+        'asn_net': 'net_asn'
+    }
+    merged_df = merged_df.rename(columns=column_mapping)
+
+    # Remover colunas duplicadas
+    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+
+    # Remover duplicatas de linhas
+    merged_df = merged_df.drop_duplicates()
+
+    # Salvar tabela unificada
+    merged_df.to_csv("output/peeringdb_unified_data.csv", index=False)
+    print("Tabela unificada salva como 'output/peeringdb_unified_data.csv'")
 
 def main():
     checkpoint = load_checkpoint()
@@ -167,63 +221,6 @@ def main():
         # Sempre construir a tabela unificada, independentemente de erros anteriores
         print("# Construindo tabela unificada final")
         build_unified_table()
-
-def build_unified_table():
-    ix_df = pd.read_csv("output/peeringdb_ix_data.csv")
-    ixlan_df = pd.read_csv("output/peeringdb_ixlan_data.csv")
-    netixlan_df = pd.read_csv("output/peeringdb_netixlan_data.csv")
-    fac_df = pd.read_csv("output/peeringdb_fac_data.csv")
-    ixfac_df = pd.read_csv("output/peeringdb_ixfac_data.csv")
-    net_df = pd.read_csv("output/peeringdb_net_data.csv")
-
-    # Selecionar colunas relevantes
-    ix_df = ix_df[['id', 'name', 'city', 'country', 'org_id']]
-    ixlan_df = ixlan_df[['id', 'ix_id', 'name']]
-    netixlan_df = netixlan_df[['id', 'net_id', 'ix_id', 'ixlan_id', 'asn', 'ipaddr4', 'ipaddr6', 'speed']]
-    fac_df = fac_df[['id', 'name', 'city', 'country', 'org_id']]
-    ixfac_df = ixfac_df[['id', 'ix_id', 'fac_id']]
-    net_df = net_df[['id', 'name', 'asn', 'info_type', 'policy_general']]
-
-    # Mesclar dataframes
-    merged_df = netixlan_df.merge(ixlan_df, left_on='ixlan_id', right_on='id', suffixes=('', '_ixlan'))
-    merged_df = merged_df.merge(ix_df, left_on='ix_id', right_on='id', suffixes=('', '_ix'))
-    merged_df = merged_df.merge(ixfac_df, on='ix_id', suffixes=('', '_ixfac'))
-    merged_df = merged_df.merge(fac_df, left_on='fac_id', right_on='id', suffixes=('', '_fac'))
-    merged_df = merged_df.merge(net_df, left_on='net_id', right_on='id', suffixes=('', '_net'))
-
-    # Renomear colunas para evitar ambiguidades e remover duplicatas
-    column_mapping = {
-        'id': 'netixlan_id',
-        'id_ixlan': 'ixlan_id',
-        'id_ix': 'ix_id',
-        'id_ixfac': 'ixfac_id',
-        'id_fac': 'fac_id',
-        'id_net': 'net_id',
-        'name': 'netixlan_name',
-        'name_ixlan': 'ixlan_name',
-        'name_ix': 'ix_name',
-        'name_fac': 'fac_name',
-        'name_net': 'net_name',
-        'city': 'ix_city',
-        'city_fac': 'fac_city',
-        'country': 'ix_country',
-        'country_fac': 'fac_country',
-        'org_id': 'ix_org_id',
-        'org_id_fac': 'fac_org_id',
-        'asn': 'net_asn',
-        'asn_net': 'net_asn'
-    }
-    merged_df = merged_df.rename(columns=column_mapping)
-
-    # Remover colunas duplicadas
-    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
-
-    # Remover duplicatas de linhas
-    merged_df = merged_df.drop_duplicates()
-
-    # Salvar tabela unificada
-    merged_df.to_csv("output/peeringdb_unified_data.csv", index=False)
-    print("Tabela unificada salva como 'output/peeringdb_unified_data.csv'")
 
 if __name__ == "__main__":
     main()
